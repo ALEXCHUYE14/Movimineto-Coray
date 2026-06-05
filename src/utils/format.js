@@ -41,7 +41,14 @@ export const edad = (fechaNac) => {
 export const iniciales = (nombres = '', apellidos = '') =>
   `${(nombres[0] || '').toUpperCase()}${(apellidos[0] || '').toUpperCase()}` || '??'
 
-// Numero de WhatsApp del consultorio para agendamiento rapido
+// Link para que el PACIENTE contacte al consultorio de Diego
 export const WHATSAPP_CONSULTORIO = '51996113188'
 export const linkWhatsApp = (mensaje = '') =>
   `https://wa.me/${WHATSAPP_CONSULTORIO}?text=${encodeURIComponent(mensaje)}`
+
+// Link para que DIEGO contacte al PACIENTE (usa el celular del paciente)
+export const linkWhatsAppPaciente = (celular, mensaje = '') => {
+  const num  = (celular || '').replace(/\D/g, '')
+  const full = num.startsWith('51') ? num : `51${num}`
+  return `https://wa.me/${full}?text=${encodeURIComponent(mensaje)}`
+}

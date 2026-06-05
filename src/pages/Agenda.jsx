@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { EstadoCita, Avatar, Vacio } from '../components/ui'
-import { soles, hora12, iniciales, linkWhatsApp } from '../utils/format'
+import { soles, hora12, iniciales, linkWhatsAppPaciente } from '../utils/format'
 import { addDays, format, parseISO, startOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
@@ -208,7 +208,7 @@ function VistaDia({ citas, onEstado, onEliminar, onNueva }) {
 function FilaCita({ c, onEstado, onEliminar, compacta }) {
   const [abierto, setAbierto] = useState(false)
   const wsp = c.pacientes?.celular
-    ? linkWhatsApp(`Hola ${c.pacientes?.nombres}, te recordamos tu cita en Movimiento Koray el ${c.fecha} a las ${hora12(c.hora)}.`)
+    ? linkWhatsAppPaciente(c.pacientes.celular, `Hola ${c.pacientes?.nombres}, te recordamos tu cita en Movimiento Koray el ${c.fecha} a las ${hora12(c.hora)}.`)
     : null
   return (
     <div className={compacta ? 'px-4 py-3' : 'p-3.5'}>

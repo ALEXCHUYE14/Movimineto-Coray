@@ -4,7 +4,7 @@ import { supabaseConfigurado } from '../lib/supabase'
 import Logo from '../components/Logo'
 import {
   Mail, Lock, Eye, EyeOff, AlertCircle, HeartPulse,
-  CalendarDays, Users, CreditCard, ShieldCheck, Loader2
+  CalendarDays, Users, CreditCard, ShieldCheck, Loader2, MessageCircle
 } from 'lucide-react'
 
 const FEATURES = [
@@ -192,10 +192,19 @@ export default function Login() {
             </button>
           </div>
 
-          {/* Pie de seguridad */}
-          <div className="flex items-center justify-center gap-1.5 mt-5 text-[11px] text-clinic-300">
-            <ShieldCheck size={13} />
-            <span>Acceso exclusivo del personal autorizado</span>
+          {/* Pie */}
+          <div className="flex flex-col items-center gap-2.5 mt-5">
+            <div className="flex items-center justify-center gap-1.5 text-[11px] text-clinic-300">
+              <ShieldCheck size={13} />
+              <span>Acceso exclusivo del personal autorizado</span>
+            </div>
+            <a
+              href="https://wa.me/51924996961?text=Hola%2C+tengo+problemas+para+acceder+al+sistema+Movimiento+Koray."
+              target="_blank" rel="noreferrer"
+              className="flex items-center gap-1.5 text-[12px] text-mint-600 hover:text-mint-700 font-medium transition-colors">
+              <MessageCircle size={13} />
+              ¿Problemas para acceder? Contactar soporte
+            </a>
           </div>
         </div>
       </div>

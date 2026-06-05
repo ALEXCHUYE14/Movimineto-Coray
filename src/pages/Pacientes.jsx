@@ -4,14 +4,16 @@ import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { Avatar, Vacio } from '../components/ui'
 import { iniciales, edad } from '../utils/format'
-import { Search, Plus, ChevronRight, UserPlus, Phone, Users, CreditCard } from 'lucide-react'
+import { Search, Plus, ChevronRight, UserPlus, Phone, Users, CreditCard, Trash2 } from 'lucide-react'
+
+const esSoloDigitos = (s) => /^\d+$/.test(s.trim())
 
 export default function Pacientes() {
-  const [pacientes, setPacientes]   = useState([])
-  const [busqueda, setBusqueda]     = useState('')
-  const [cargando, setCargando]     = useState(true)
-  const [modal, setModal]           = useState(false)
-  const [form, setForm]             = useState(vacio())
+  const [pacientes, setPacientes] = useState([])
+  const [busqueda, setBusqueda]   = useState('')
+  const [cargando, setCargando]   = useState(true)
+  const [modal, setModal]         = useState(false)
+  const [form, setForm]           = useState(vacio())
 
   function vacio() {
     return {
@@ -30,22 +32,38 @@ export default function Pacientes() {
   useEffect(() => { cargar() }, [])
 
   const guardar = async () => {
-    if (!form.nombres || !form.apellidos) return
+    if (!form.nombres.trim() || !form.apellidos.trim()) return
     await supabase.from('pacientes').insert({
       ...form,
       fecha_nacimiento: form.fecha_nacimiento || null,
-      dni: form.dni || null
+      dni: form.dni.trim() || null
     })
     setForm(vacio()); setModal(false); cargar()
   }
 
+  const eliminar = async (id, nombre) => {
+    if (!confirm(`¿Eliminar definitivamente a ${nombre}?\nEsta acción no se puede deshacer.`)) return
+    await supabase.from('pacientes').delete().eq('id', id)
+    cargar()
+  }
+
+  const q = busqueda.trim()
+  const modoDNI = esSoloDigitos(q) && q.length >= 3
+
   const filtrados = pacientes.filter(p => {
-    const t = `${p.nombres} ${p.apellidos} ${p.celular || ''} ${p.telefono || ''} ${p.dni || ''}`.toLowerCase()
-    return t.includes(busqueda.toLowerCase())
+    if (!q) return true
+    if (esSoloDigitos(q)) {
+      const dniNorm = (p.dni      || '').replace(/\D/g, '')
+      const celNorm = (p.celular  || '').replace(/\D/g, '')
+      const telNorm = (p.telefono || '').replace(/\D/g, '')
+      return dniNorm.includes(q) || celNorm.includes(q) || telNorm.includes(q)
+    }
+    return `${p.nombres} ${p.apellidos}`.toLowerCase().includes(q.toLowerCase())
   })
 
   return (
     <div className="space-y-5">
+      {/* Barra de búsqueda */}
       <div className="flex gap-3">
         <div className="relative flex-1">
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-clinic-300" />
@@ -61,7 +79,15 @@ export default function Pacientes() {
         </button>
       </div>
 
-      <p className="text-[13px] text-clinic-400 px-1">{filtrados.length} paciente(s)</p>
+      {/* Contador + indicador modo DNI */}
+      <div className="flex items-center justify-between px-1">
+        <p className="text-[13px] text-clinic-400">{filtrados.length} paciente(s)</p>
+        {modoDNI && (
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-clinic-500 bg-clinic-50 border border-clinic-100 px-2.5 py-1 rounded-full">
+            <CreditCard size={12} /> Buscando por DNI / teléfono
+          </span>
+        )}
+      </div>
 
       {cargando ? (
         <div className="card p-8 text-center text-clinic-300">Cargando...</div>
@@ -69,7 +95,11 @@ export default function Pacientes() {
         <Vacio
           icon={Users}
           titulo={busqueda ? 'Sin resultados' : 'Aún no tienes pacientes'}
-          descripcion={busqueda ? 'Prueba con otro nombre, teléfono o DNI.' : 'Registra a tu primer paciente para empezar.'}
+          descripcion={
+            busqueda
+              ? modoDNI ? 'No se encontró ningún paciente con ese DNI o teléfono.' : 'Prueba con otro nombre.'
+              : 'Registra a tu primer paciente para empezar.'
+          }
           accion={!busqueda && (
             <button onClick={() => setModal(true)} className="btn-primary">
               <UserPlus size={18} /> Registrar paciente
@@ -79,33 +109,45 @@ export default function Pacientes() {
       ) : (
         <div className="space-y-2.5">
           {filtrados.map(p => (
-            <Link key={p.id} to={`/pacientes/${p.id}`}
-              className="card p-3.5 flex items-center gap-3 hover:shadow-float transition-shadow animate-fade-up">
-              <Avatar texto={iniciales(p.nombres, p.apellidos)} size={46} />
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-clinic-800 truncate">{p.nombres} {p.apellidos}</p>
-                <div className="flex items-center gap-2.5 flex-wrap mt-0.5">
-                  {p.dni && (
-                    <span className="text-[12px] text-clinic-400 flex items-center gap-1">
-                      <CreditCard size={11} className="text-clinic-300" /> DNI {p.dni}
-                    </span>
-                  )}
-                  {p.celular && (
-                    <span className="text-[12px] text-clinic-400 flex items-center gap-1">
-                      <Phone size={11} className="text-clinic-300" /> {p.celular}
-                    </span>
-                  )}
-                  {edad(p.fecha_nacimiento) != null && (
-                    <span className="text-[12px] text-clinic-300">{edad(p.fecha_nacimiento)} años</span>
-                  )}
+            <div key={p.id} className="card p-3.5 flex items-center gap-3 hover:shadow-float transition-shadow animate-fade-up">
+              {/* Área principal → navega al detalle */}
+              <Link to={`/pacientes/${p.id}`} className="flex items-center gap-3 flex-1 min-w-0">
+                <Avatar texto={iniciales(p.nombres, p.apellidos)} size={46} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-clinic-800 truncate">{p.nombres} {p.apellidos}</p>
+                  <div className="flex items-center gap-2.5 flex-wrap mt-0.5">
+                    {p.dni && (
+                      <span className={`text-[12px] flex items-center gap-1 ${modoDNI ? 'text-clinic-600 font-semibold' : 'text-clinic-400'}`}>
+                        <CreditCard size={11} className={modoDNI ? 'text-clinic-500' : 'text-clinic-300'} />
+                        DNI {p.dni}
+                      </span>
+                    )}
+                    {p.celular && (
+                      <span className="text-[12px] text-clinic-400 flex items-center gap-1">
+                        <Phone size={11} className="text-clinic-300" /> {p.celular}
+                      </span>
+                    )}
+                    {edad(p.fecha_nacimiento) != null && (
+                      <span className="text-[12px] text-clinic-300">{edad(p.fecha_nacimiento)} años</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <ChevronRight size={18} className="text-clinic-300 shrink-0" />
-            </Link>
+                <ChevronRight size={18} className="text-clinic-300 shrink-0" />
+              </Link>
+
+              {/* Botón eliminar (no navega) */}
+              <button
+                onClick={() => eliminar(p.id, `${p.nombres} ${p.apellidos}`)}
+                className="grid place-items-center w-9 h-9 rounded-full text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+                aria-label="Eliminar paciente">
+                <Trash2 size={16} />
+              </button>
+            </div>
           ))}
         </div>
       )}
 
+      {/* Modal nuevo paciente */}
       <Modal
         abierto={modal} onClose={() => setModal(false)} titulo="Nuevo paciente"
         footer={<>
@@ -115,12 +157,12 @@ export default function Pacientes() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Nombres</label>
+              <label className="label">Nombres *</label>
               <input className="field" value={form.nombres}
                 onChange={e => setForm({ ...form, nombres: e.target.value })} />
             </div>
             <div>
-              <label className="label">Apellidos</label>
+              <label className="label">Apellidos *</label>
               <input className="field" value={form.apellidos}
                 onChange={e => setForm({ ...form, apellidos: e.target.value })} />
             </div>
@@ -129,7 +171,8 @@ export default function Pacientes() {
             <div>
               <label className="label">DNI</label>
               <input className="field" inputMode="numeric" maxLength={8} placeholder="12345678"
-                value={form.dni} onChange={e => setForm({ ...form, dni: e.target.value })} />
+                value={form.dni}
+                onChange={e => setForm({ ...form, dni: e.target.value.replace(/\D/g, '') })} />
             </div>
             <div>
               <label className="label">Fecha de nacimiento</label>
