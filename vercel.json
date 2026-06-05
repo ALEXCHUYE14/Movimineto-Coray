@@ -1,0 +1,14 @@
+{
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "build": {
+    "env": {
+      "VITE_SUPABASE_URL": "https://vciticnsuxqwlalumgyr.supabase.co",
+      "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjaXRpY25zdXhxd2xhbHVtZ3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2ODYyNTMsImV4cCI6MjA5NjI2MjI1M30.58M4rcu8mTTHWxO7C9qKbhkvN9w6ZbtHlE0kXrGJGtM"
+    }
+  }
+}
