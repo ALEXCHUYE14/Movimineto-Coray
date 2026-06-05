@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgba(57,191,155,0.06), transparent 60%),
+    radial-gradient(900px 500px at -10% 0%, rgba(43,120,171,0.07), transparent 55%),
+    #f8fafc;
+  color: #1b3650;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* respeta el notch en iOS */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+/* Scrollbar sutil en escritorio */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #d6e9f4; border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #aed3e9; background-clip: content-box; }
+
+@layer components {
+  /* Tarjeta base reutilizable */
+  .card {
+    @apply bg-white rounded-xl2 shadow-card border border-clinic-100/60;
+  }
+
+  /* Boton principal - area tactil >= 48px */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 min-h-[48px] px-5 rounded-xl2
+           font-semibold text-[15px] transition-all duration-200 select-none
+           active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-clinic-500 text-white shadow-soft
+           hover:bg-clinic-600 focus:ring-4 focus:ring-clinic-200;
+  }
+  .btn-mint {
+    @apply btn bg-mint-500 text-white shadow-soft
+           hover:bg-mint-600 focus:ring-4 focus:ring-mint-200;
+  }
+  .btn-ghost {
+    @apply btn bg-clinic-50 text-clinic-700 hover:bg-clinic-100;
+  }
+  .btn-soft-danger {
+    @apply btn bg-rose-50 text-rose-600 hover:bg-rose-100;
+  }
+
+  /* Campos de formulario tactiles */
+  .field {
+    @apply w-full min-h-[48px] px-4 rounded-xl2 bg-slatebg-50 border border-clinic-100
+           text-[15px] text-clinic-900 placeholder:text-clinic-300
+           focus:bg-white focus:border-clinic-400 focus:ring-4 focus:ring-clinic-100
+           outline-none transition;
+  }
+  .label {
+    @apply block text-[13px] font-semibold text-clinic-700 mb-1.5;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full;
+  }
+}
