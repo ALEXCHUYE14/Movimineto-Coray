@@ -31,7 +31,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-[1fr_460px]">
+    <div className="min-h-screen grid lg:grid-cols-2">
 
       {/* ── Panel izquierdo decorativo (solo escritorio) ── */}
       <div className="hidden lg:flex relative overflow-hidden bg-gradient-to-br from-clinic-800 via-clinic-700 to-clinic-500 text-white flex-col">

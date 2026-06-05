@@ -4,10 +4,11 @@ import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { Avatar, Vacio, SeccionTitulo } from '../components/ui'
 import { iniciales, edad, soles, fechaCorta, hoyISO, linkWhatsAppPaciente } from '../utils/format'
+import { imprimirDiagnostico } from '../utils/print'
 import {
   ArrowLeft, Phone, MessageCircle, PackageCheck, Plus, FileText,
   Stethoscope, CalendarClock, Cake, NotebookPen, CreditCard,
-  Pencil, CalendarPlus, BadgeCheck, Trash2
+  Pencil, CalendarPlus, BadgeCheck, Trash2, FileDown
 } from 'lucide-react'
 
 export default function PacienteDetalle() {
@@ -251,9 +252,16 @@ export default function PacienteDetalle() {
       </div>
 
       <SeccionTitulo accion={
-        <button onClick={() => setModal(true)} className="text-sm font-semibold text-clinic-500 flex items-center gap-1">
-          <Plus size={16} /> Atención
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => imprimirDiagnostico(p, historiales, edad(p.fecha_nacimiento))}
+            className="text-sm font-semibold text-clinic-400 hover:text-clinic-600 flex items-center gap-1 transition-colors">
+            <FileDown size={15} /> PDF
+          </button>
+          <button onClick={() => setModal(true)} className="text-sm font-semibold text-clinic-500 flex items-center gap-1">
+            <Plus size={16} /> Atención
+          </button>
+        </div>
       }>
         Evolución clínica
       </SeccionTitulo>
