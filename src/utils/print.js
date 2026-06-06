@@ -16,15 +16,14 @@ function abrirVentana(html) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COMPROBANTE DE PAGO  (formato A4, impresora normal)
+// COMPROBANTE DE PAGO  (estética ticket térmico, tamaño A4)
 // ─────────────────────────────────────────────────────────────────────────────
 export function imprimirTicket(ingreso) {
   const logoUrl   = `${window.location.origin}${LOGO_SRC}`
   const fecha     = new Date(ingreso.fecha_pago)
-  const fechaStr  = fecha.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
+  const fechaStr  = fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const horaStr   = fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   const numRec    = (ingreso.id || '').replace(/-/g, '').slice(0, 10).toUpperCase()
-  const hoy       = fecha.toLocaleDateString('es-PE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
   const pacNombre = ingreso.pacientes
     ? `${ingreso.pacientes.nombres} ${ingreso.pacientes.apellidos}`
     : null
@@ -35,263 +34,98 @@ export function imprimirTicket(ingreso) {
 <meta charset="UTF-8">
 <title>Comprobante #${numRec}</title>
 <style>
-  @page { size: A4; margin: 0; }
+  @page { size: A4; margin: 14mm 20mm; }
   @media print {
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .no-print { display: none !important; }
-    body { margin: 0; }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 12px;
-    color: #1e2d3d;
-    background: #f0f4f8;
-    line-height: 1.6;
-  }
-
-  /* ── Botón pantalla ── */
-  .no-print {
-    position: fixed; top: 16px; right: 16px; z-index: 999;
-  }
-  .btn-imprimir {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 11px 24px; font-size: 14px; cursor: pointer;
-    background: #1d6fa4; color: white; border: none;
-    border-radius: 8px; font-weight: 700; font-family: inherit;
-    box-shadow: 0 4px 14px rgba(29,111,164,0.4);
-  }
-  .btn-imprimir:hover { background: #15588a; }
-
-  /* ── Hoja A4 ── */
-  .page {
-    width: 210mm;
-    min-height: 297mm;
-    margin: 0 auto;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 15px;
+    color: #000;
     background: #fff;
-    position: relative;
-    display: flex;
   }
-
-  /* ── Banda lateral azul ── */
-  .sidebar {
-    width: 8mm;
-    min-height: 297mm;
-    background: linear-gradient(180deg, #1d6fa4 0%, #15a98e 100%);
-    flex-shrink: 0;
-  }
-
-  /* ── Contenido principal ── */
-  .content {
-    flex: 1;
-    padding: 14mm 16mm 14mm 14mm;
+  /* Columna ticket centrada, ocupa toda la altura A4 menos márgenes */
+  .ticket {
+    max-width: 135mm;
+    margin: 0 auto;
+    min-height: calc(297mm - 28mm);
     display: flex;
     flex-direction: column;
-    min-height: 297mm;
   }
-
-  /* ── Cabecera ── */
-  .header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding-bottom: 10mm;
-    border-bottom: 0.5px solid #c9dce9;
-    margin-bottom: 10mm;
+  .center  { text-align: center; }
+  .bold    { font-weight: bold; }
+  .large   { font-size: 22px; }
+  .small   { font-size: 13px; }
+  hr       { border: none; border-top: 1px dashed #000; margin: 11px 0; }
+  .hr-sol  { border: none; border-top: 2px solid #000; margin: 16px 0; }
+  .row     { display: flex; justify-content: space-between; margin: 6px 0; font-size: 15px; }
+  .logo    { width: 76px; height: 76px; object-fit: cover; border-radius: 8px; }
+  .monto   { font-size: 62px; font-weight: bold; text-align: center; margin: 14px 0 4px; }
+  .check   { font-size: 66px; text-align: center; }
+  /* Empuja el bloque de monto hacia el centro de la hoja */
+  .spacer  { flex: 1; }
+  /* Botón solo en pantalla */
+  .no-print {
+    text-align: center; padding: 12px;
+    background: #f0f4f8; margin-bottom: 16px; border-radius: 6px;
   }
-  .header-left { display: flex; align-items: center; gap: 12px; }
-  .logo {
-    width: 58px; height: 58px;
-    border-radius: 12px; object-fit: cover; flex-shrink: 0;
-    border: 2px solid #ddeef8;
+  .btn {
+    padding: 10px 26px; font-size: 14px; cursor: pointer;
+    background: #2b78ab; color: white; border: none;
+    border-radius: 6px; font-weight: bold; font-family: inherit;
   }
-  .logo-mk {
-    width: 58px; height: 58px; border-radius: 12px; flex-shrink: 0;
-    background: linear-gradient(135deg, #1d6fa4 0%, #15a98e 100%);
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 900; font-size: 20px; letter-spacing: -1px;
-    border: 2px solid #ddeef8;
-  }
-  .clinic-name    { font-size: 17px; font-weight: 800; color: #1a2e42; letter-spacing: -0.3px; }
-  .clinic-sub     { font-size: 11px; color: #5490b5; margin-top: 3px; }
-  .clinic-contact { font-size: 11px; color: #7aafc7; margin-top: 2px; }
-
-  .header-right   { text-align: right; }
-  .doc-type {
-    font-size: 20px; font-weight: 900; letter-spacing: -0.5px;
-    color: #1d6fa4; text-transform: uppercase;
-  }
-  .doc-subtitle { font-size: 10px; color: #7aafc7; margin-top: 3px; letter-spacing: 0.05em; text-transform: uppercase; }
-  .doc-num {
-    margin-top: 6px; display: inline-block;
-    font-size: 11px; font-weight: 700; color: #1a2e42;
-    background: #eaf3fb; border: 1px solid #c9dce9;
-    padding: 4px 12px; border-radius: 20px; letter-spacing: 0.03em;
-  }
-
-  /* ── Bloque central de monto ── */
-  .monto-bloque {
-    background: linear-gradient(135deg, #1d6fa4 0%, #15a98e 100%);
-    border-radius: 16px;
-    padding: 22mm 20mm;
-    text-align: center;
-    margin-bottom: 10mm;
-    color: white;
-  }
-  .check-icon { font-size: 52px; line-height: 1; margin-bottom: 6mm; }
-  .monto-label {
-    font-size: 13px; font-weight: 700; letter-spacing: 0.2em;
-    text-transform: uppercase; opacity: 0.85; margin-bottom: 4mm;
-  }
-  .monto-valor {
-    font-size: 62px; font-weight: 900; line-height: 1;
-    letter-spacing: -1px; margin-bottom: 4mm;
-  }
-  .monto-estado {
-    display: inline-block;
-    background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.5);
-    border-radius: 30px; padding: 5px 20px;
-    font-size: 14px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase;
-  }
-
-  /* ── Tabla de detalle ── */
-  .detalle-titulo {
-    font-size: 10px; font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.1em; color: #5490b5;
-    margin-bottom: 5mm; padding-bottom: 3mm;
-    border-bottom: 1px solid #c9dce9;
-  }
-  .detalle-tabla {
-    width: 100%; border-collapse: collapse;
-    border: 1px solid #ddeef8; border-radius: 10px;
-    overflow: hidden; margin-bottom: 10mm;
-  }
-  .detalle-tabla tr:not(:last-child) td { border-bottom: 1px solid #eef5fb; }
-  .detalle-label {
-    width: 34%; padding: 9px 14px;
-    font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.07em; color: #5490b5;
-    background: #f4f9fd; vertical-align: middle;
-    border-right: 1px solid #ddeef8; white-space: nowrap;
-  }
-  .detalle-val {
-    padding: 9px 14px; font-size: 13px;
-    font-weight: 600; color: #1a2e42; vertical-align: middle;
-  }
-  .detalle-val.concepto { font-size: 14px; font-weight: 700; color: #1d6fa4; }
-
-  /* ── Spacer ── */
-  .spacer { flex: 1; }
-
-  /* ── Footer ── */
-  .footer {
-    margin-top: 10mm;
-    padding-top: 7mm;
-    border-top: 1px solid #c9dce9;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-  .footer-info { font-size: 10px; color: #7aafc7; line-height: 1.9; }
-  .footer-info strong { color: #5490b5; }
-  .footer-badge {
-    font-size: 9px; font-weight: 700; letter-spacing: 0.05em;
-    text-transform: uppercase; color: #aac5d8;
-    border: 1px solid #ddeef8; padding: 3px 10px;
-    border-radius: 20px; margin-top: 6px; display: inline-block;
-  }
-  .firma-block { text-align: center; }
-  .firma-line  { width: 140px; border-top: 1.5px solid #1a2e42; margin: 0 auto 5px; }
-  .firma-name  { font-size: 12px; font-weight: 700; color: #1a2e42; }
-  .firma-cargo { font-size: 10px; color: #5490b5; margin-top: 2px; }
 </style>
 </head>
 <body>
 
   <div class="no-print">
-    <button class="btn-imprimir" onclick="window.print()">🖨️&nbsp; Imprimir comprobante</button>
+    <button class="btn" onclick="window.print()">🖨️&nbsp; Imprimir comprobante</button>
   </div>
 
-  <div class="page">
-    <div class="sidebar"></div>
+  <div class="ticket">
 
-    <div class="content">
+    <div class="center">
+      <img class="logo" src="${logoUrl}" onerror="this.style.display='none'" />
+      <div class="bold large" style="margin-top:8px">MOVIMIENTO KORAY</div>
+      <div class="small">Centro de Terapia Física</div>
+      <div class="small">Cel: 996 113 188</div>
+    </div>
 
-      <!-- ═══ CABECERA ═══ -->
-      <div class="header">
-        <div class="header-left">
-          <img class="logo" src="${logoUrl}"
-            onerror="this.outerHTML='<div class=\\'logo-mk\\'>MK</div>'" />
-          <div>
-            <div class="clinic-name">Movimiento Koray</div>
-            <div class="clinic-sub">Centro de Terapia Física y Rehabilitación</div>
-            <div class="clinic-contact">Cel: 996 113 188 &nbsp;·&nbsp; Lima, Perú</div>
-          </div>
-        </div>
-        <div class="header-right">
-          <div class="doc-type">Comprobante de Pago</div>
-          <div class="doc-subtitle">Recibo de atención</div>
-          <div class="doc-num">N° ${numRec}</div>
-        </div>
-      </div>
+    <div class="hr-sol"></div>
+    <div class="center bold" style="font-size:17px;letter-spacing:1px">COMPROBANTE DE PAGO</div>
+    <div class="center small" style="color:#555;margin-top:4px">Recibo N° ${numRec}</div>
+    <hr />
 
-      <!-- ═══ MONTO CENTRAL ═══ -->
-      <div class="monto-bloque">
-        <div class="check-icon">✅</div>
-        <div class="monto-label">Monto pagado</div>
-        <div class="monto-valor">S/ ${Number(ingreso.monto).toFixed(2)}</div>
-        <div class="monto-estado">Pago Recibido</div>
-      </div>
+    <div class="row"><span>Fecha:</span><span>${fechaStr}</span></div>
+    <div class="row"><span>Hora:</span><span>${horaStr}</span></div>
+    ${pacNombre ? `<div class="row"><span>Paciente:</span><span style="max-width:70mm;text-align:right;word-break:break-word">${pacNombre}</span></div>` : ''}
 
-      <!-- ═══ DETALLE ═══ -->
-      <div class="detalle-titulo">Detalle del pago</div>
-      <table class="detalle-tabla">
-        <tr>
-          <td class="detalle-label">Fecha</td>
-          <td class="detalle-val">${fechaStr}</td>
-        </tr>
-        <tr>
-          <td class="detalle-label">Hora</td>
-          <td class="detalle-val">${horaStr}</td>
-        </tr>
-        ${pacNombre ? `<tr>
-          <td class="detalle-label">Paciente</td>
-          <td class="detalle-val">${pacNombre}</td>
-        </tr>` : ''}
-        <tr>
-          <td class="detalle-label">Concepto</td>
-          <td class="detalle-val concepto">${ingreso.concepto || 'Atención'}</td>
-        </tr>
-        <tr>
-          <td class="detalle-label">Método de pago</td>
-          <td class="detalle-val">${ingreso.metodo_pago}</td>
-        </tr>
-        <tr>
-          <td class="detalle-label">Total pagado</td>
-          <td class="detalle-val" style="font-size:18px;font-weight:900;color:#1d6fa4">
-            S/ ${Number(ingreso.monto).toFixed(2)}
-          </td>
-        </tr>
-      </table>
+    <hr />
+    <div class="row">
+      <span class="bold">Concepto:</span>
+      <span style="max-width:70mm;text-align:right;font-weight:bold">${ingreso.concepto || 'Atención'}</span>
+    </div>
+    <div class="row"><span>Método de pago:</span><span>${ingreso.metodo_pago}</span></div>
 
-      <div class="spacer"></div>
+    <!-- Empuja el bloque de confirmación al centro de la hoja -->
+    <div class="spacer"></div>
 
-      <!-- ═══ FOOTER ═══ -->
-      <div class="footer">
-        <div class="footer-info">
-          <div>Centro de Terapia Física <strong>Movimiento Koray</strong></div>
-          <div>Comprobante emitido el ${hoy}</div>
-          <div class="footer-badge">¡Gracias por su visita! · Recupera tu bienestar 💪</div>
-        </div>
-        <div class="firma-block">
-          <div class="firma-line"></div>
-          <div class="firma-name">Diego M. Espinoza Guerrero</div>
-          <div class="firma-cargo">Fisioterapeuta Titulado</div>
-        </div>
-      </div>
+    <div class="hr-sol"></div>
+    <div class="check">✅</div>
+    <div class="monto">S/ ${Number(ingreso.monto).toFixed(2)}</div>
+    <div class="center bold" style="font-size:18px;letter-spacing:3px;margin-bottom:6px">PAGO RECIBIDO</div>
+    <div class="hr-sol"></div>
 
-    </div><!-- /content -->
-  </div><!-- /page -->
+    <!-- Empuja el pie de página al final de la hoja -->
+    <div class="spacer"></div>
+
+    <div class="center small" style="margin-top:8px">¡Gracias por su visita!</div>
+    <div class="center small">Movimiento Koray</div>
+    <div class="center small" style="margin-bottom:6px">Recupera tu bienestar 💪</div>
+
+  </div><!-- /ticket -->
 
 </body>
 </html>`
