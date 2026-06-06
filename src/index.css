@@ -57,6 +57,10 @@ body {
   .btn-soft-danger {
     @apply btn bg-rose-50 text-rose-600 hover:bg-rose-100;
   }
+  .btn-danger {
+    @apply btn bg-rose-500 text-white shadow-soft
+           hover:bg-rose-600 focus:ring-4 focus:ring-rose-200;
+  }
 
   /* Campos de formulario tactiles */
   .field {

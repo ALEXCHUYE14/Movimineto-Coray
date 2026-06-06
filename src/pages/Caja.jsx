@@ -7,7 +7,7 @@ import { imprimirTicket } from '../utils/print'
 import {
   Wallet, Plus, TrendingUp, TrendingDown, CalendarDays,
   Banknote, Smartphone, CreditCard, Printer, Lock,
-  ArrowDownRight, ArrowUpRight
+  ArrowDownRight, ArrowUpRight, MinusCircle
 } from 'lucide-react'
 
 const METODOS = ['Efectivo', 'Yape', 'Plin', 'Transferencia', 'Tarjeta']
@@ -223,6 +223,20 @@ export default function Caja() {
   return (
     <div className="space-y-5">
 
+      {/* Acciones rápidas — encima de las tarjetas */}
+      <div className="flex gap-2">
+        <button
+          onClick={abrirEgreso}
+          className="btn-ghost flex-1 flex items-center justify-center gap-1.5">
+          <MinusCircle size={18} /> Registrar egreso
+        </button>
+        <button
+          onClick={() => setModalCierre(true)}
+          className="btn-danger flex-1 flex items-center justify-center gap-1.5">
+          <Lock size={16} /> Cerrar caja
+        </button>
+      </div>
+
       {/* Estadísticas */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard icon={TrendingUp}   label="Ingresos del mes"  value={soles(totalMes)}              accent="mint" />
@@ -231,19 +245,9 @@ export default function Caja() {
         <StatCard icon={Wallet}       label="Balance del mes"   value={soles(totalMes - egresosMes)} accent="amber" />
       </div>
 
-      {/* Acciones */}
-      <div className="flex gap-2 justify-end flex-wrap">
-        <button
-          onClick={() => setModalCierre(true)}
-          className="btn-ghost flex items-center gap-1.5">
-          <Lock size={16} /> Cerrar caja
-        </button>
-        <button
-          onClick={abrirEgreso}
-          className="btn-soft-danger flex items-center gap-1.5">
-          <ArrowDownRight size={18} /> Registrar egreso
-        </button>
-        <button onClick={abrirIngreso} className="btn-primary">
+      {/* Registrar pago */}
+      <div className="flex justify-end">
+        <button onClick={abrirIngreso} className="btn-primary flex items-center gap-2">
           <Plus size={18} /> Registrar pago
         </button>
       </div>
