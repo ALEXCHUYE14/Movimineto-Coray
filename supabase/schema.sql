@@ -148,6 +148,20 @@ create table if not exists public.ingresos_caja (
 
 create index if not exists idx_ingresos_fecha on public.ingresos_caja (fecha_pago desc);
 
+-- ----------------------------------------------------------------------------
+-- 8. EGRESOS / CAJA
+-- ----------------------------------------------------------------------------
+create table if not exists public.egresos_caja (
+  id            uuid primary key default gen_random_uuid(),
+  concepto      text not null,
+  monto         numeric(10,2) not null check (monto > 0),
+  categoria     text not null default 'Gastos operativos'
+                check (categoria in ('Materiales','Gastos operativos','Equipos','Otros')),
+  fecha_egreso  timestamptz not null default now()
+);
+
+create index if not exists idx_egresos_fecha on public.egresos_caja (fecha_egreso desc);
+
 -- ============================================================================
 --  SEGURIDAD: ROW LEVEL SECURITY (RLS)
 --  Modelo single-tenant (una sola clinica). Solo usuarios autenticados
@@ -161,6 +175,7 @@ alter table public.historiales_clinicos enable row level security;
 alter table public.paquetes_adquiridos  enable row level security;
 alter table public.citas                enable row level security;
 alter table public.ingresos_caja        enable row level security;
+alter table public.egresos_caja         enable row level security;
 
 -- Perfiles: cada usuario ve/edita unicamente su propio perfil
 create policy "perfil_propio_select" on public.perfiles
@@ -176,7 +191,7 @@ declare t text;
 begin
   foreach t in array array[
     'pacientes','servicios_precios','historiales_clinicos',
-    'paquetes_adquiridos','citas','ingresos_caja'
+    'paquetes_adquiridos','citas','ingresos_caja','egresos_caja'
   ]
   loop
     execute format($f$
