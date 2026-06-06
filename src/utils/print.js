@@ -121,207 +121,390 @@ export function imprimirDiagnostico(paciente, historiales, edadAnos) {
   const logoUrl  = `${window.location.origin}${LOGO_SRC}`
   const hoy      = new Date()
   const fechaHoy = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
+  const numDoc   = `MK-${hoy.getFullYear()}${String(hoy.getMonth()+1).padStart(2,'0')}${String(hoy.getDate()).padStart(2,'0')}-${(paciente.dni || '').slice(-4).padStart(4,'0')}`
 
   const fmtFecha = (iso) => {
     if (!iso) return ''
     const d = new Date(iso + 'T12:00:00')
-    return d.toLocaleDateString('es-PE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+    return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
+  }
+  const fmtDiaSemana = (iso) => {
+    if (!iso) return ''
+    const d = new Date(iso + 'T12:00:00')
+    return d.toLocaleDateString('es-PE', { weekday: 'long' })
   }
 
   const campo = (etq, val) => val
-    ? `<div class="campo">
-         <div class="campo-label">${etq}</div>
-         <div class="campo-val">${val.replace(/\n/g, '<br>')}</div>
-       </div>`
+    ? `<tr>
+         <td class="campo-label">${etq}</td>
+         <td class="campo-val">${val.replace(/\n/g, '<br>')}</td>
+       </tr>`
     : ''
 
   const histHTML = historiales.length === 0
-    ? `<p style="color:#aed3e9;font-style:italic;padding:16px 0">Sin registros clínicos registrados.</p>`
-    : historiales.map(h => `
-        <div class="historia-item">
-          <div class="historia-date">📅 ${fmtFecha(h.fecha_atencion)}</div>
-          <div class="historia-content">
-            ${campo('Motivo de consulta', h.motivo_consulta)}
-            ${campo('Evaluación fisioterapéutica', h.evaluacion_fisioterapeutica)}
-            ${campo('Diagnóstico', h.diagnostico)}
-            ${campo('Evolución', h.evolucion)}
-            ${campo('Notas de sesión', h.notas_sesion)}
+    ? `<div class="sin-registros">No se han registrado sesiones clínicas para este paciente.</div>`
+    : historiales.map((h, i) => `
+        <div class="sesion" ${i > 0 ? 'style="margin-top:22px"' : ''}>
+          <div class="sesion-header">
+            <div class="sesion-num">Sesión ${historiales.length - i}</div>
+            <div class="sesion-fecha">
+              <span class="sesion-dia">${fmtDiaSemana(h.fecha_atencion)}</span>
+              ${fmtFecha(h.fecha_atencion)}
+            </div>
           </div>
+          <table class="campos-tabla">
+            ${campo('Motivo de consulta',          h.motivo_consulta)}
+            ${campo('Evaluación fisioterapéutica', h.evaluacion_fisioterapeutica)}
+            ${campo('Diagnóstico',                  h.diagnostico)}
+            ${campo('Evolución',                    h.evolucion)}
+            ${campo('Notas de sesión',              h.notas_sesion)}
+          </table>
         </div>`).join('')
 
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Reporte Clínico — ${paciente.nombres} ${paciente.apellidos}</title>
+<title>Informe Clínico — ${paciente.nombres} ${paciente.apellidos}</title>
 <style>
-  @page { size: A4; margin: 20mm 16mm 22mm 16mm; }
+  @page {
+    size: A4;
+    margin: 0;
+  }
   @media print {
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .no-print    { display: none !important; }
-    .historia-item { page-break-inside: avoid; }
+    .no-print { display: none !important; }
+    .sesion   { page-break-inside: avoid; }
+    body      { margin: 0; }
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 12.5px;
-    color: #1b3650;
-    background: #fff;
-    line-height: 1.6;
+    font-size: 11.5px;
+    color: #1e2d3d;
+    background: #f0f4f8;
+    line-height: 1.65;
   }
 
-  /* ── Botón pantalla ── */
+  /* ───── BOTÓN PANTALLA ───── */
   .no-print {
-    position: fixed; top: 14px; right: 14px; z-index: 999;
+    position: fixed; top: 16px; right: 16px; z-index: 999;
+    display: flex; gap: 10px;
   }
   .btn-pdf {
     display: inline-flex; align-items: center; gap: 7px;
-    padding: 10px 20px; font-size: 14px; cursor: pointer;
-    background: #2b78ab; color: white; border: none;
+    padding: 11px 22px; font-size: 14px; cursor: pointer;
+    background: #1d6fa4; color: white; border: none;
     border-radius: 8px; font-weight: 700; font-family: inherit;
-    box-shadow: 0 4px 12px rgba(43,120,171,0.35);
+    box-shadow: 0 4px 14px rgba(29,111,164,0.4);
+    transition: background 0.15s;
+  }
+  .btn-pdf:hover { background: #15588a; }
+
+  /* ───── HOJA A4 ───── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    background: #fff;
+    position: relative;
+    overflow: hidden;
   }
 
-  /* ── Header ── */
-  .header {
-    display: flex; align-items: center; gap: 14px;
-    padding-bottom: 14px;
-    border-bottom: 3px solid #2b78ab;
-    margin-bottom: 22px;
+  /* ───── BANDA LATERAL AZUL ───── */
+  .sidebar {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 7mm;
+    background: linear-gradient(180deg, #1d6fa4 0%, #15a98e 100%);
   }
+
+  /* ───── CONTENIDO ───── */
+  .content {
+    margin-left: 7mm;
+    padding: 12mm 14mm 12mm 12mm;
+    min-height: 297mm;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ───── HEADER ───── */
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-bottom: 10mm;
+    border-bottom: 0.5px solid #c9dce9;
+    margin-bottom: 8mm;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
   .logo {
-    width: 58px; height: 58px; border-radius: 12px;
-    object-fit: cover; flex-shrink: 0;
+    width: 52px; height: 52px;
+    border-radius: 10px; object-fit: cover; flex-shrink: 0;
+    border: 2px solid #ddeef8;
   }
   .logo-mk {
-    width: 58px; height: 58px; border-radius: 12px; flex-shrink: 0;
-    background: linear-gradient(135deg, #2b78ab 0%, #1aa384 100%);
+    width: 52px; height: 52px; border-radius: 10px; flex-shrink: 0;
+    background: linear-gradient(135deg, #1d6fa4 0%, #15a98e 100%);
     display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 900; font-size: 20px;
+    color: white; font-weight: 900; font-size: 18px; letter-spacing: -1px;
+    border: 2px solid #ddeef8;
   }
-  .clinic-name { font-size: 21px; font-weight: 800; color: #1c405e; }
-  .clinic-sub  { font-size: 12px; color: #4593c2; margin-top: 3px; }
-  .doc-info { margin-left: auto; text-align: right; }
-  .doc-info h1 { font-size: 17px; color: #2b78ab; font-weight: 700; }
-  .doc-info p  { font-size: 11px; color: #79b6d9; margin-top: 3px; }
+  .clinic-block { line-height: 1.4; }
+  .clinic-name  { font-size: 15px; font-weight: 800; color: #1a2e42; letter-spacing: -0.3px; }
+  .clinic-sub   { font-size: 10px; color: #5490b5; margin-top: 2px; }
+  .clinic-contact { font-size: 10px; color: #7aafc7; margin-top: 1px; }
 
-  /* ── Ficha paciente ── */
-  .patient-card {
-    background: #eef6fb;
-    border-left: 5px solid #2b78ab;
-    padding: 14px 18px;
-    border-radius: 0 12px 12px 0;
-    margin-bottom: 22px;
+  .header-right { text-align: right; }
+  .doc-type {
+    font-size: 17px; font-weight: 900; letter-spacing: -0.5px;
+    color: #1d6fa4; text-transform: uppercase;
   }
-  .patient-name { font-size: 18px; font-weight: 800; color: #1c405e; }
-  .patient-meta {
-    display: flex; gap: 20px; flex-wrap: wrap;
-    margin-top: 7px; font-size: 12px; color: #4593c2;
-  }
-
-  /* ── Secciones ── */
-  .section-title {
-    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.08em; color: #79b6d9;
-    margin: 20px 0 10px; padding-bottom: 5px;
-    border-bottom: 1px solid #d6e9f4;
-  }
-  .bg-gen {
-    background: #f8fafc; border: 1px solid #d6e9f4;
-    border-radius: 8px; padding: 12px 16px;
-    white-space: pre-line; margin-bottom: 18px;
+  .doc-subtitle { font-size: 9.5px; color: #7aafc7; margin-top: 3px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .doc-num {
+    margin-top: 5px;
+    display: inline-block;
+    font-size: 10px; font-weight: 700; color: #1a2e42;
+    background: #eaf3fb; border: 1px solid #c9dce9;
+    padding: 3px 9px; border-radius: 20px; letter-spacing: 0.03em;
   }
 
-  /* ── Historia clínica ── */
-  .historia-item    { margin-bottom: 20px; }
-  .historia-date {
-    font-size: 11.5px; font-weight: 700; color: #2b78ab;
-    background: #eef6fb; padding: 4px 12px;
-    border-radius: 4px; display: inline-block;
-    margin-bottom: 8px; text-transform: capitalize;
+  /* ───── FICHA DEL PACIENTE ───── */
+  .ficha {
+    background: linear-gradient(135deg, #eaf3fb 0%, #e7f8f4 100%);
+    border: 1px solid #c9dce9;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 8mm;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
   }
-  .historia-content {
-    border: 1px solid #d6e9f4; border-radius: 10px;
-    padding: 13px 16px;
+  .ficha-avatar {
+    width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, #1d6fa4 0%, #15a98e 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 900; font-size: 16px; letter-spacing: -1px;
+    border: 2.5px solid #fff;
+    box-shadow: 0 2px 8px rgba(29,111,164,0.25);
   }
-  .campo       { margin-bottom: 10px; }
-  .campo:last-child { margin-bottom: 0; }
+  .ficha-datos { flex: 1; }
+  .ficha-nombre { font-size: 15px; font-weight: 800; color: #1a2e42; line-height: 1.2; }
+  .ficha-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 6px 10px; margin-top: 7px;
+  }
+  .ficha-item { }
+  .ficha-item-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #7aafc7; }
+  .ficha-item-val   { font-size: 11px; font-weight: 600; color: #1a2e42; margin-top: 1px; }
+  .ficha-item-val.empty { color: #aac5d8; font-style: italic; font-weight: 400; font-size: 10.5px; }
+
+  /* ───── SECCIÓN ANTECEDENTES ───── */
+  .section-label {
+    display: flex; align-items: center; gap: 7px;
+    margin-bottom: 5px;
+  }
+  .section-label-line {
+    flex: 1; height: 1px; background: #c9dce9;
+  }
+  .section-label-text {
+    font-size: 8.5px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.1em; color: #5490b5; white-space: nowrap;
+    padding: 0 4px;
+  }
+  .antecedentes-box {
+    background: #f8fafc; border: 1px solid #ddeef8;
+    border-left: 3px solid #5490b5;
+    border-radius: 0 8px 8px 0;
+    padding: 9px 12px;
+    font-size: 11.5px; color: #2e4a61;
+    white-space: pre-line; line-height: 1.65;
+    margin-bottom: 8mm;
+  }
+
+  /* ───── SESIONES CLÍNICAS ───── */
+  .sesion { margin-bottom: 0; }
+  .sesion-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 6px;
+  }
+  .sesion-num {
+    font-size: 9px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #fff;
+    background: #1d6fa4; padding: 3px 9px; border-radius: 20px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .sesion-fecha {
+    font-size: 11px; color: #2e4a61; font-weight: 600;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .sesion-dia {
+    text-transform: capitalize; color: #5490b5;
+    font-weight: 400; font-size: 10.5px;
+  }
+  .sesion-separator {
+    flex: 1; height: 1px; background: #e4eef7;
+  }
+
+  /* Tabla de campos */
+  .campos-tabla {
+    width: 100%; border-collapse: collapse;
+    border: 1px solid #ddeef8; border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .campos-tabla tr:not(:last-child) td { border-bottom: 1px solid #eef5fb; }
   .campo-label {
-    font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.07em; color: #79b6d9; margin-bottom: 2px;
+    width: 28%; padding: 6px 10px;
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #5490b5;
+    background: #f4f9fd; vertical-align: top;
+    border-right: 1px solid #ddeef8;
+    white-space: nowrap;
   }
-  .campo-val   { font-size: 12.5px; color: #1b3650; }
+  .campo-val {
+    padding: 6px 11px; font-size: 11px; color: #1e2d3d;
+    vertical-align: top; line-height: 1.6;
+  }
 
-  /* ── Footer ── */
-  .footer {
-    margin-top: 32px; padding-top: 16px;
-    border-top: 2px solid #d6e9f4;
-    display: flex; justify-content: space-between; align-items: flex-end;
+  .sin-registros {
+    color: #aac5d8; font-style: italic;
+    text-align: center; padding: 20px 0; font-size: 12px;
   }
-  .watermark   { font-size: 11px; color: #aed3e9; line-height: 1.7; }
-  .firma       { text-align: center; }
-  .firma-line  { width: 185px; border-top: 1px solid #1b3650; margin: 0 auto 5px; }
-  .firma-name  { font-size: 12.5px; font-weight: 700; }
-  .firma-titulo{ font-size: 11px; color: #4593c2; }
+
+  /* ───── ESPACIADOR FLEX ───── */
+  .spacer { flex: 1; }
+
+  /* ───── FOOTER ───── */
+  .footer {
+    margin-top: 10mm;
+    padding-top: 6mm;
+    border-top: 1px solid #c9dce9;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .footer-info { font-size: 9.5px; color: #7aafc7; line-height: 1.8; }
+  .footer-info strong { color: #5490b5; }
+  .footer-badge {
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; color: #aac5d8;
+    border: 1px solid #ddeef8; padding: 3px 9px; border-radius: 20px;
+    margin-top: 5px; display: inline-block;
+  }
+
+  .firma-block { text-align: center; }
+  .firma-line {
+    width: 160px; border-top: 1.5px solid #1a2e42;
+    margin: 0 auto 5px;
+  }
+  .firma-name  { font-size: 11.5px; font-weight: 700; color: #1a2e42; }
+  .firma-cargo { font-size: 9.5px; color: #5490b5; margin-top: 2px; }
+  .firma-cod   { font-size: 9px; color: #7aafc7; margin-top: 1px; }
 </style>
 </head>
 <body>
 
-  <!-- Botón solo en pantalla -->
+  <!-- BOTÓN PANTALLA -->
   <div class="no-print">
-    <button class="btn-pdf" onclick="window.print()">⬇️ Guardar PDF / Imprimir</button>
+    <button class="btn-pdf" onclick="window.print()">⬇&nbsp; Guardar PDF / Imprimir</button>
   </div>
 
-  <!-- HEADER -->
-  <div class="header">
-    <img class="logo" src="${logoUrl}"
-      onerror="this.outerHTML='<div class=\\'logo-mk\\'>MK</div>'" />
-    <div>
-      <div class="clinic-name">Movimiento Koray</div>
-      <div class="clinic-sub">Centro de Terapia Física &nbsp;·&nbsp; Cel: 996 113 188</div>
-    </div>
-    <div class="doc-info">
-      <h1>Reporte Clínico</h1>
-      <p>Emitido: ${fechaHoy}</p>
-    </div>
-  </div>
+  <div class="page">
+    <!-- Banda lateral decorativa -->
+    <div class="sidebar"></div>
 
-  <!-- FICHA PACIENTE -->
-  <div class="patient-card">
-    <div class="patient-name">${paciente.nombres} ${paciente.apellidos}</div>
-    <div class="patient-meta">
-      ${paciente.dni          ? `<span>📋 DNI: <strong>${paciente.dni}</strong></span>` : ''}
-      ${edadAnos  != null     ? `<span>🎂 ${edadAnos} años</span>` : ''}
-      ${paciente.celular      ? `<span>📱 ${paciente.celular}</span>` : ''}
-      ${paciente.telefono     ? `<span>☎️ ${paciente.telefono}</span>` : ''}
-    </div>
-  </div>
+    <div class="content">
 
-  ${paciente.historial_medico_general ? `
-    <div class="section-title">Antecedentes Médicos Generales</div>
-    <div class="bg-gen">${paciente.historial_medico_general}</div>
-  ` : ''}
+      <!-- ═══ HEADER ═══ -->
+      <div class="header">
+        <div class="header-left">
+          <img class="logo" src="${logoUrl}"
+            onerror="this.outerHTML='<div class=\\'logo-mk\\'>MK</div>'" />
+          <div class="clinic-block">
+            <div class="clinic-name">Movimiento Koray</div>
+            <div class="clinic-sub">Centro de Terapia Física y Rehabilitación</div>
+            <div class="clinic-contact">Cel: 996 113 188 &nbsp;·&nbsp; Lima, Perú</div>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="doc-type">Informe Clínico</div>
+          <div class="doc-subtitle">Fisioterapia y Rehabilitación</div>
+          <div class="doc-num">${numDoc}</div>
+        </div>
+      </div>
 
-  <div class="section-title">
-    Evolución Clínica
-    <span style="font-weight:400;text-transform:none;letter-spacing:0"> — ${historiales.length} registro(s)</span>
-  </div>
+      <!-- ═══ FICHA PACIENTE ═══ -->
+      <div class="ficha">
+        <div class="ficha-avatar">${(paciente.nombres||'?')[0]}${(paciente.apellidos||'?')[0]}</div>
+        <div class="ficha-datos">
+          <div class="ficha-nombre">${paciente.nombres} ${paciente.apellidos}</div>
+          <div class="ficha-grid">
+            <div class="ficha-item">
+              <div class="ficha-item-label">DNI</div>
+              <div class="ficha-item-val ${!paciente.dni ? 'empty' : ''}">${paciente.dni || 'No registrado'}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Edad</div>
+              <div class="ficha-item-val ${edadAnos == null ? 'empty' : ''}">${edadAnos != null ? edadAnos + ' años' : 'No registrada'}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Celular</div>
+              <div class="ficha-item-val ${!paciente.celular ? 'empty' : ''}">${paciente.celular || 'No registrado'}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Sesiones registradas</div>
+              <div class="ficha-item-val">${historiales.length}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Fecha del informe</div>
+              <div class="ficha-item-val">${fechaHoy}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Especialidad</div>
+              <div class="ficha-item-val">Fisioterapia</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-  ${histHTML}
+      <!-- ═══ ANTECEDENTES ═══ -->
+      ${paciente.historial_medico_general ? `
+        <div class="section-label" style="margin-bottom:6px">
+          <span class="section-label-text">Antecedentes médicos generales</span>
+          <div class="section-label-line"></div>
+        </div>
+        <div class="antecedentes-box">${paciente.historial_medico_general}</div>
+      ` : ''}
 
-  <!-- FOOTER -->
-  <div class="footer">
-    <div class="watermark">
-      <p>Centro de Terapia Física <strong>Movimiento Koray</strong></p>
-      <p>Reporte generado el ${fechaHoy}</p>
-      <p>Sistema de Gestión Clínica · Confidencial</p>
-    </div>
-    <div class="firma">
-      <div class="firma-line"></div>
-      <div class="firma-name">Diego Miguel Espinoza Guerrero</div>
-      <div class="firma-titulo">Fisioterapeuta Colegiado</div>
-    </div>
-  </div>
+      <!-- ═══ EVOLUCIÓN CLÍNICA ═══ -->
+      <div class="section-label" style="margin-bottom:8px">
+        <span class="section-label-text">Evolución clínica · ${historiales.length} registro${historiales.length !== 1 ? 's' : ''}</span>
+        <div class="section-label-line"></div>
+      </div>
+
+      ${histHTML}
+
+      <!-- Empuja el footer al fondo -->
+      <div class="spacer"></div>
+
+      <!-- ═══ FOOTER ═══ -->
+      <div class="footer">
+        <div class="footer-info">
+          <div>Centro de Terapia Física <strong>Movimiento Koray</strong></div>
+          <div>Informe generado el ${fechaHoy}</div>
+          <div class="footer-badge">Documento confidencial · Uso clínico exclusivo</div>
+        </div>
+        <div class="firma-block">
+          <div class="firma-line"></div>
+          <div class="firma-name">Diego M. Espinoza Guerrero</div>
+          <div class="firma-cargo">Fisioterapeuta Titulado</div>
+          <div class="firma-cod">Especialista en Rehabilitación Física</div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /page -->
 
 </body>
 </html>`
