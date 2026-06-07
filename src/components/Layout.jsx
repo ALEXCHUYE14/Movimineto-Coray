@@ -2,21 +2,22 @@ import { useState } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutGrid, CalendarDays, Users, PackageCheck, Wallet, Tags,
-  Menu, LogOut, X
+  Menu, LogOut, X, ClipboardList
 } from 'lucide-react'
 import Logo from './Logo'
 import { useAuth } from '../context/AuthContext'
 
 const nav = [
-  { to: '/',          label: 'Inicio',    icon: LayoutGrid,   end: true },
-  { to: '/agenda',    label: 'Agenda',    icon: CalendarDays },
-  { to: '/pacientes', label: 'Pacientes', icon: Users },
-  { to: '/paquetes',  label: 'Paquetes',  icon: PackageCheck },
-  { to: '/caja',      label: 'Caja',      icon: Wallet },
-  { to: '/servicios', label: 'Servicios', icon: Tags }
+  { to: '/',             label: 'Inicio',       icon: LayoutGrid,   end: true },
+  { to: '/agenda',       label: 'Agenda',       icon: CalendarDays },
+  { to: '/pacientes',    label: 'Pacientes',    icon: Users },
+  { to: '/tratamientos', label: 'Tratamientos', icon: ClipboardList },
+  { to: '/caja',         label: 'Caja',         icon: Wallet },
+  { to: '/paquetes',     label: 'Paquetes',     icon: PackageCheck },
+  { to: '/servicios',    label: 'Servicios',    icon: Tags }
 ]
 
-// Barra inferior: 5 accesos mas usados (estilo app nativa)
+// Barra inferior movil: primeros 5 (Paquetes y Servicios quedan en el drawer)
 const navInferior = nav.slice(0, 5)
 
 export default function Layout() {

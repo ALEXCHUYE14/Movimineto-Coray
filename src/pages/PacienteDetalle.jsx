@@ -35,7 +35,7 @@ export default function PacienteDetalle() {
 
   function vacioHist() {
     return {
-      fecha_atencion: hoyISO(), motivo_consulta: '',
+      fecha_atencion: hoyISO(), antecedentes: '', motivo_consulta: '',
       evaluacion_fisioterapeutica: '', diagnostico: '',
       evolucion: '', notas_sesion: ''
     }
@@ -279,6 +279,7 @@ export default function PacienteDetalle() {
                 <div className="flex items-center gap-2 text-[12px] font-bold text-clinic-500 mb-2">
                   <CalendarClock size={14} /> {fechaCorta(h.fecha_atencion)}
                 </div>
+                {h.antecedentes                && <Campo etq="Antecedentes"   val={h.antecedentes} />}
                 {h.motivo_consulta             && <Campo etq="Motivo"         val={h.motivo_consulta} />}
                 {h.evaluacion_fisioterapeutica && <Campo etq="Evaluación"     val={h.evaluacion_fisioterapeutica} />}
                 {h.diagnostico                 && <Campo etq="Diagnóstico"    val={h.diagnostico} />}
@@ -300,6 +301,11 @@ export default function PacienteDetalle() {
           <div><label className="label">Fecha de atención</label>
             <input type="date" className="field" value={form.fecha_atencion}
               onChange={e => setForm({ ...form, fecha_atencion: e.target.value })} /></div>
+          <div><label className="label">Antecedentes</label>
+            <textarea className="field min-h-[70px] py-3 resize-none"
+              placeholder="Antecedentes relevantes: cirugías, traumatismos, patologías previas..."
+              value={form.antecedentes}
+              onChange={e => setForm({ ...form, antecedentes: e.target.value })} /></div>
           <div><label className="label">Motivo de consulta</label>
             <textarea className="field min-h-[70px] py-3 resize-none" value={form.motivo_consulta}
               onChange={e => setForm({ ...form, motivo_consulta: e.target.value })} /></div>

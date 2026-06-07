@@ -9,6 +9,7 @@ import PacienteDetalle from './pages/PacienteDetalle'
 import Paquetes from './pages/Paquetes'
 import Caja from './pages/Caja'
 import Servicios from './pages/Servicios'
+import Tratamientos from './pages/Tratamientos'
 import Splash from './components/Splash'
 
 function Privado({ children }) {
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="agenda" element={<Agenda />} />
         <Route path="pacientes" element={<Pacientes />} />
         <Route path="pacientes/:id" element={<PacienteDetalle />} />
+        <Route path="tratamientos" element={<Tratamientos />} />
         <Route path="paquetes" element={<Paquetes />} />
         <Route path="caja" element={<Caja />} />
         <Route path="servicios" element={<Servicios />} />
