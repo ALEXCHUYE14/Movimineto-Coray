@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -11,50 +11,68 @@ import {
 
 export default function Dashboard() {
   const { perfil } = useAuth()
-  const [citasHoy, setCitasHoy]         = useState([])
-  const [ingresoMes, setIngresoMes]     = useState(0)
+  const [citasHoy, setCitasHoy]             = useState([])
+  const [ingresoMes, setIngresoMes]         = useState(0)
   const [totalPacientes, setTotalPacientes] = useState(0)
-  const [paqPorVencer, setPaqPorVencer] = useState([])
-  const [cargando, setCargando]         = useState(true)
+  const [paqPorVencer, setPaqPorVencer]     = useState([])
+  const [cargando, setCargando]             = useState(true)
+  const [marcando, setMarcando]             = useState(null)
+  const [errorCarga, setErrorCarga]         = useState(null)
+  const montado = useRef(true)
   const hoy = hoyISO()
+
+  useEffect(() => {
+    montado.current = true
+    return () => { montado.current = false }
+  }, [])
 
   const cargar = async () => {
     setCargando(true)
+    setErrorCarga(null)
     const inicioMes = hoy.slice(0, 8) + '01'
-
-    const [citasRes, ingresosRes, pacCountRes, paqRes] = await Promise.all([
-      supabase.from('citas')
-        .select('id, fecha, hora, estado, pacientes(nombres, apellidos), servicios_precios(nombre_servicio)')
-        .eq('fecha', hoy).order('hora', { ascending: true }),
-      supabase.from('ingresos_caja')
-        .select('monto')
-        .gte('fecha_pago', inicioMes),
-      supabase.from('pacientes')
-        .select('id', { count: 'exact', head: true }),
-      supabase.from('paquetes_adquiridos')
-        .select('id, tipo_paquete, sesiones_totales, sesiones_consumidas, pacientes(nombres, apellidos)')
-    ])
-
-    setCitasHoy(citasRes.data || [])
-    setIngresoMes((ingresosRes.data || []).reduce((s, r) => s + Number(r.monto), 0))
-    setTotalPacientes(pacCountRes.count || 0)
-
-    // Paquetes con 1 o 2 sesiones restantes (aún activos)
-    setPaqPorVencer(
-      (paqRes.data || []).filter(p => {
-        const restantes = p.sesiones_totales - p.sesiones_consumidas
-        return restantes > 0 && restantes <= 2
-      })
-    )
-
-    setCargando(false)
+    try {
+      const [citasRes, ingresosRes, pacCountRes, paqRes] = await Promise.all([
+        supabase.from('citas')
+          .select('id, fecha, hora, estado, pacientes(nombres, apellidos), servicios_precios(nombre_servicio)')
+          .eq('fecha', hoy).order('hora', { ascending: true }),
+        supabase.from('ingresos_caja')
+          .select('monto')
+          .gte('fecha_pago', inicioMes),
+        supabase.from('pacientes')
+          .select('id', { count: 'exact', head: true }),
+        supabase.from('paquetes_adquiridos')
+          .select('id, tipo_paquete, sesiones_totales, sesiones_consumidas, pacientes(nombres, apellidos)')
+      ])
+      if (!montado.current) return
+      setCitasHoy(citasRes.data || [])
+      setIngresoMes((ingresosRes.data || []).reduce((s, r) => s + Number(r.monto), 0))
+      setTotalPacientes(pacCountRes.count || 0)
+      setPaqPorVencer(
+        (paqRes.data || []).filter(p => {
+          const restantes = p.sesiones_totales - p.sesiones_consumidas
+          return restantes > 0 && restantes <= 2
+        })
+      )
+    } catch {
+      if (montado.current) setErrorCarga('No se pudo cargar la información. Verifica tu conexión.')
+    } finally {
+      if (montado.current) setCargando(false)
+    }
   }
 
   useEffect(() => { cargar() }, [])
 
   const marcarAsistida = async (id) => {
-    await supabase.from('citas').update({ estado: 'Asistida' }).eq('id', id)
-    cargar()
+    setMarcando(id)
+    try {
+      const { error } = await supabase.from('citas').update({ estado: 'Asistida' }).eq('id', id)
+      if (error) throw error
+      if (montado.current) await cargar()
+    } catch {
+      alert('No se pudo actualizar la cita. Intenta nuevamente.')
+    } finally {
+      if (montado.current) setMarcando(null)
+    }
   }
 
   const pacientesActivos = new Set(
@@ -72,13 +90,20 @@ export default function Dashboard() {
         </h2>
       </div>
 
+      {/* Error de carga */}
+      {errorCarga && (
+        <div className="card p-4 border-l-4 border-rose-400 bg-rose-50 text-rose-700 text-sm flex items-center gap-2">
+          <AlertCircle size={16} className="shrink-0" /> {errorCarga}
+        </div>
+      )}
+
       {/* Tarjetas resumen */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={CalendarDays} label="Citas hoy"           value={citasHoy.length}
+        <StatCard icon={CalendarDays} label="Citas hoy"        value={citasHoy.length}
           hint={`${pendientes} por confirmar`} accent="clinic" />
-        <StatCard icon={Users}        label="Pacientes hoy"       value={pacientesActivos} accent="mint" />
-        <StatCard icon={Wallet}       label="Ingresos del mes"    value={soles(ingresoMes)} accent="amber" />
-        <StatCard icon={UserCheck}    label="Total pacientes"     value={totalPacientes}
+        <StatCard icon={Users}        label="Pacientes hoy"    value={pacientesActivos} accent="mint" />
+        <StatCard icon={Wallet}       label="Ingresos del mes" value={soles(ingresoMes)} accent="amber" />
+        <StatCard icon={UserCheck}    label="Total pacientes"  value={totalPacientes}
           hint="registrados" accent="rose" />
       </div>
 
@@ -156,9 +181,12 @@ export default function Dashboard() {
                 <div className="flex flex-col items-end gap-2">
                   <EstadoCita estado={c.estado} />
                   {c.estado !== 'Asistida' && c.estado !== 'Cancelada' && (
-                    <button onClick={() => marcarAsistida(c.id)}
-                      className="text-mint-600 text-[12px] font-bold flex items-center gap-1">
-                      <CheckCircle2 size={14} /> Asistió
+                    <button
+                      onClick={() => marcarAsistida(c.id)}
+                      disabled={marcando === c.id}
+                      className="text-mint-600 text-[12px] font-bold flex items-center gap-1 disabled:opacity-50 transition-opacity">
+                      <CheckCircle2 size={14} />
+                      {marcando === c.id ? 'Guardando...' : 'Asistió'}
                     </button>
                   )}
                 </div>

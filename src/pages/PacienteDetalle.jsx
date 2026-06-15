@@ -8,30 +8,36 @@ import { imprimirDiagnostico } from '../utils/print'
 import {
   ArrowLeft, Phone, MessageCircle, PackageCheck, Plus, FileText,
   Stethoscope, CalendarClock, Cake, NotebookPen, CreditCard,
-  Pencil, CalendarPlus, BadgeCheck, Trash2, FileDown
+  Pencil, CalendarPlus, BadgeCheck, Trash2, FileDown, Loader2, AlertCircle
 } from 'lucide-react'
 
 export default function PacienteDetalle() {
-  const { id }     = useParams()
-  const navigate   = useNavigate()
+  const { id }   = useParams()
+  const navigate = useNavigate()
+
   const [p, setP]                     = useState(null)
+  const [cargando, setCargando]       = useState(true)
+  const [noEncontrado, setNoEncontrado] = useState(false)
   const [paquetes, setPaquetes]       = useState([])
   const [historiales, setHistoriales] = useState([])
   const [servicios, setServicios]     = useState([])
   const [tab, setTab]                 = useState('historial')
 
   // Modal: nueva atención clínica
-  const [modal, setModal] = useState(false)
-  const [form, setForm]   = useState(vacioHist())
+  const [modal, setModal]         = useState(false)
+  const [form, setForm]           = useState(vacioHist())
+  const [guardandoHist, setGuardandoHist] = useState(false)
 
   // Modal: editar datos del paciente
-  const [editModal, setEditModal] = useState(false)
-  const [editForm, setEditForm]   = useState(null)
+  const [editModal, setEditModal]   = useState(false)
+  const [editForm, setEditForm]     = useState(null)
+  const [guardandoEdit, setGuardandoEdit] = useState(false)
 
   // Modal: agendar cita rápida
-  const [citaModal, setCitaModal]         = useState(false)
-  const [citaForm, setCitaForm]           = useState(null)
-  const [citaGuardada, setCitaGuardada]   = useState(false)
+  const [citaModal, setCitaModal]       = useState(false)
+  const [citaForm, setCitaForm]         = useState(null)
+  const [citaGuardada, setCitaGuardada] = useState(false)
+  const [guardandoCita, setGuardandoCita] = useState(false)
 
   function vacioHist() {
     return {
@@ -47,12 +53,17 @@ export default function PacienteDetalle() {
       supabase.from('paquetes_adquiridos').select('*').eq('paciente_id', id).order('creado_en', { ascending: false }),
       supabase.from('historiales_clinicos').select('*').eq('paciente_id', id).order('fecha_atencion', { ascending: false })
     ])
-    setP(pac.data)
+    if (!pac.data) {
+      setNoEncontrado(true)
+    } else {
+      setP(pac.data)
+      setNoEncontrado(false)
+    }
     setPaquetes(paq.data || [])
     setHistoriales(hist.data || [])
+    setCargando(false)
   }
 
-  // Servicios se cargan una vez al montar
   useEffect(() => {
     supabase.from('servicios_precios')
       .select('id, nombre_servicio, precio')
@@ -60,21 +71,34 @@ export default function PacienteDetalle() {
       .then(({ data }) => setServicios(data || []))
   }, [])
 
-  useEffect(() => { cargar() }, [id])
+  useEffect(() => { setCargando(true); setNoEncontrado(false); cargar() }, [id])
 
   /* ── Historial clínico ── */
   const guardarHist = async () => {
     if (!form.motivo_consulta && !form.notas_sesion && !form.evolucion) return
-    await supabase.from('historiales_clinicos').insert({ paciente_id: id, ...form })
-    setForm(vacioHist()); setModal(false); cargar()
+    setGuardandoHist(true)
+    try {
+      const { error } = await supabase.from('historiales_clinicos').insert({ paciente_id: id, ...form })
+      if (error) throw error
+      setForm(vacioHist()); setModal(false); cargar()
+    } catch {
+      alert('No se pudo guardar la atención. Intenta nuevamente.')
+    } finally {
+      setGuardandoHist(false)
+    }
   }
 
   /* ── Sesiones de paquete ── */
   const restarSesion = async (paq) => {
     if (paq.sesiones_consumidas >= paq.sesiones_totales) return
-    await supabase.from('paquetes_adquiridos')
-      .update({ sesiones_consumidas: paq.sesiones_consumidas + 1 }).eq('id', paq.id)
-    cargar()
+    try {
+      const { error } = await supabase.from('paquetes_adquiridos')
+        .update({ sesiones_consumidas: paq.sesiones_consumidas + 1 }).eq('id', paq.id)
+      if (error) throw error
+      cargar()
+    } catch {
+      alert('No se pudo actualizar la sesión. Intenta nuevamente.')
+    }
   }
 
   /* ── Editar paciente ── */
@@ -93,25 +117,44 @@ export default function PacienteDetalle() {
 
   const guardarEdicion = async () => {
     if (!editForm.nombres.trim() || !editForm.apellidos.trim()) return
-    await supabase.from('pacientes').update({
-      nombres:                  editForm.nombres.trim(),
-      apellidos:                editForm.apellidos.trim(),
-      dni:                      editForm.dni.trim() || null,
-      celular:                  editForm.celular.trim() || null,
-      telefono:                 editForm.telefono.trim() || null,
-      fecha_nacimiento:         editForm.fecha_nacimiento || null,
-      historial_medico_general: editForm.historial_medico_general.trim() || null
-    }).eq('id', id)
-    setEditModal(false)
-    cargar()
+    setGuardandoEdit(true)
+    try {
+      const { error } = await supabase.from('pacientes').update({
+        nombres:                  editForm.nombres.trim(),
+        apellidos:                editForm.apellidos.trim(),
+        dni:                      editForm.dni.trim() || null,
+        celular:                  editForm.celular.trim() || null,
+        telefono:                 editForm.telefono.trim() || null,
+        fecha_nacimiento:         editForm.fecha_nacimiento || null,
+        historial_medico_general: editForm.historial_medico_general.trim() || null
+      }).eq('id', id)
+      if (error) throw error
+      setEditModal(false)
+      cargar()
+    } catch {
+      alert('No se pudo guardar los cambios. Intenta nuevamente.')
+    } finally {
+      setGuardandoEdit(false)
+    }
   }
 
-  /* ── Eliminar paciente ── */
+  /* ── Eliminar paciente ──
+     IMPORTANTE: el confirm() se muestra ANTES de cerrar el modal para no
+     desorientar al usuario con un modal que se cierra solo antes de confirmar. */
   const eliminarPaciente = async () => {
+    const confirmar = confirm(
+      `¿Eliminar definitivamente a ${p.nombres} ${p.apellidos}?\n\n` +
+      `Se eliminarán también todas sus citas, paquetes e historial clínico. Esta acción no se puede deshacer.`
+    )
+    if (!confirmar) return
     setEditModal(false)
-    if (!confirm(`¿Eliminar definitivamente a ${p.nombres} ${p.apellidos}?\n\nSe eliminarán también todas sus citas, paquetes e historial clínico. Esta acción no se puede deshacer.`)) return
-    await supabase.from('pacientes').delete().eq('id', id)
-    navigate('/pacientes')
+    try {
+      const { error } = await supabase.from('pacientes').delete().eq('id', id)
+      if (error) throw error
+      navigate('/pacientes')
+    } catch {
+      alert('No se pudo eliminar el paciente. Intenta nuevamente.')
+    }
   }
 
   /* ── Agendar cita rápida ── */
@@ -123,19 +166,49 @@ export default function PacienteDetalle() {
 
   const guardarCita = async () => {
     if (!citaForm.fecha || !citaForm.hora) return
-    await supabase.from('citas').insert({
-      paciente_id: id,
-      servicio_id: citaForm.servicio_id || null,
-      fecha:       citaForm.fecha,
-      hora:        citaForm.hora,
-      estado:      'Pendiente',
-      notas:       citaForm.notas.trim() || null
-    })
-    setCitaGuardada(true)
+    setGuardandoCita(true)
+    try {
+      const { error } = await supabase.from('citas').insert({
+        paciente_id: id,
+        servicio_id: citaForm.servicio_id || null,
+        fecha:       citaForm.fecha,
+        hora:        citaForm.hora,
+        estado:      'Pendiente',
+        notas:       (citaForm.notas || '').trim() || null
+      })
+      if (error) throw error
+      setCitaGuardada(true)
+    } catch {
+      alert('No se pudo agendar la cita. Intenta nuevamente.')
+    } finally {
+      setGuardandoCita(false)
+    }
   }
 
-  /* ── Render ── */
-  if (!p) return <div className="card p-8 text-center text-clinic-300">Cargando paciente...</div>
+  /* ── Render: estados de carga y error ── */
+  if (cargando) {
+    return <div className="card p-8 text-center text-clinic-300">Cargando paciente...</div>
+  }
+
+  if (noEncontrado) {
+    return (
+      <div className="space-y-4">
+        <Link to="/pacientes" className="inline-flex items-center gap-1.5 text-sm font-semibold text-clinic-500">
+          <ArrowLeft size={16} /> Pacientes
+        </Link>
+        <div className="card p-10 text-center flex flex-col items-center gap-3">
+          <div className="grid place-items-center w-14 h-14 rounded-2xl bg-rose-50 text-rose-400">
+            <AlertCircle size={26} />
+          </div>
+          <div>
+            <p className="font-display font-bold text-clinic-700">Paciente no encontrado</p>
+            <p className="text-sm text-clinic-400 mt-1">El registro solicitado no existe o fue eliminado.</p>
+          </div>
+          <Link to="/pacientes" className="btn-primary">Volver a Pacientes</Link>
+        </div>
+      </div>
+    )
+  }
 
   const wsp = p.celular
     ? linkWhatsAppPaciente(p.celular, `Hola ${p.nombres}, le saluda el Centro de Terapia Física Movimiento Koray.`)
@@ -189,15 +262,6 @@ export default function PacienteDetalle() {
             <CalendarPlus size={16} /> Agendar cita
           </button>
         </div>
-
-        {p.historial_medico_general && (
-          <div className="mt-4 bg-clinic-50/70 rounded-xl2 p-3.5 text-[13px] text-clinic-600">
-            <p className="font-semibold text-clinic-700 mb-1 flex items-center gap-1.5">
-              <FileText size={14} /> Historial médico general
-            </p>
-            {p.historial_medico_general}
-          </div>
-        )}
       </div>
 
       {/* ── Paquetes y sesiones ── */}
@@ -226,7 +290,7 @@ export default function PacienteDetalle() {
                       </p>
                     </div>
                     <button onClick={() => restarSesion(paq)} disabled={agotado}
-                      className="btn-mint shrink-0 px-4">−1 sesión</button>
+                      className="btn-mint shrink-0 px-4 disabled:opacity-40">−1 sesión</button>
                   </div>
                   <div className="mt-3 h-2 rounded-full bg-clinic-50 overflow-hidden">
                     <div
@@ -245,57 +309,119 @@ export default function PacienteDetalle() {
       <div className="inline-flex bg-clinic-50 rounded-xl2 p-1 w-full">
         {[['historial', 'Línea de tiempo'], ['datos', 'Notas médicas']].map(([k, lbl]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`flex-1 min-h-[42px] rounded-xl2 text-sm font-semibold transition ${tab === k ? 'bg-white text-clinic-700 shadow-soft' : 'text-clinic-400'}`}>
+            className={`flex-1 min-h-[42px] rounded-xl2 text-sm font-semibold transition ${
+              tab === k ? 'bg-white text-clinic-700 shadow-soft' : 'text-clinic-400'
+            }`}>
             {lbl}
           </button>
         ))}
       </div>
 
-      <SeccionTitulo accion={
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => imprimirDiagnostico(p, historiales, edad(p.fecha_nacimiento))}
-            className="text-sm font-semibold text-clinic-400 hover:text-clinic-600 flex items-center gap-1 transition-colors">
-            <FileDown size={15} /> PDF
-          </button>
-          <button onClick={() => setModal(true)} className="text-sm font-semibold text-clinic-500 flex items-center gap-1">
-            <Plus size={16} /> Atención
-          </button>
-        </div>
-      }>
-        Evolución clínica
-      </SeccionTitulo>
+      {/* ── Contenido de tabs ── */}
+      {tab === 'historial' && (
+        <>
+          <SeccionTitulo accion={
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => imprimirDiagnostico(p, historiales, edad(p.fecha_nacimiento))}
+                className="text-sm font-semibold text-clinic-400 hover:text-clinic-600 flex items-center gap-1 transition-colors">
+                <FileDown size={15} /> PDF
+              </button>
+              <button onClick={() => setModal(true)} className="text-sm font-semibold text-clinic-500 flex items-center gap-1">
+                <Plus size={16} /> Atención
+              </button>
+            </div>
+          }>
+            Evolución clínica
+          </SeccionTitulo>
 
-      {historiales.length === 0 ? (
-        <Vacio icon={Stethoscope} titulo="Sin registros clínicos"
-          descripcion="Registra la primera evaluación o sesión de este paciente."
-          accion={<button onClick={() => setModal(true)} className="btn-primary"><Plus size={18} /> Nueva atención</button>} />
-      ) : (
-        <ol className="relative border-l-2 border-clinic-100 ml-2 space-y-4">
-          {historiales.map(h => (
-            <li key={h.id} className="ml-5 animate-fade-up">
-              <span className="absolute -left-[9px] grid place-items-center w-4 h-4 rounded-full bg-clinic-500 ring-4 ring-white" />
-              <div className="card p-4">
-                <div className="flex items-center gap-2 text-[12px] font-bold text-clinic-500 mb-2">
-                  <CalendarClock size={14} /> {fechaCorta(h.fecha_atencion)}
-                </div>
-                {h.antecedentes                && <Campo etq="Antecedentes"   val={h.antecedentes} />}
-                {h.motivo_consulta             && <Campo etq="Motivo"         val={h.motivo_consulta} />}
-                {h.evaluacion_fisioterapeutica && <Campo etq="Evaluación"     val={h.evaluacion_fisioterapeutica} />}
-                {h.diagnostico                 && <Campo etq="Diagnóstico"    val={h.diagnostico} />}
-                {h.evolucion                   && <Campo etq="Evolución"      val={h.evolucion} />}
-                {h.notas_sesion                && <Campo etq="Notas de sesión" val={h.notas_sesion} />}
+          {historiales.length === 0 ? (
+            <Vacio icon={Stethoscope} titulo="Sin registros clínicos"
+              descripcion="Registra la primera evaluación o sesión de este paciente."
+              accion={<button onClick={() => setModal(true)} className="btn-primary"><Plus size={18} /> Nueva atención</button>} />
+          ) : (
+            <ol className="relative border-l-2 border-clinic-100 ml-2 space-y-4">
+              {historiales.map(h => (
+                <li key={h.id} className="ml-5 animate-fade-up">
+                  <span className="absolute -left-[9px] grid place-items-center w-4 h-4 rounded-full bg-clinic-500 ring-4 ring-white" />
+                  <div className="card p-4">
+                    <div className="flex items-center gap-2 text-[12px] font-bold text-clinic-500 mb-2">
+                      <CalendarClock size={14} /> {fechaCorta(h.fecha_atencion)}
+                    </div>
+                    {h.antecedentes                && <Campo etq="Antecedentes"              val={h.antecedentes} />}
+                    {h.motivo_consulta             && <Campo etq="Motivo"                    val={h.motivo_consulta} />}
+                    {h.evaluacion_fisioterapeutica && <Campo etq="Evaluación"                val={h.evaluacion_fisioterapeutica} />}
+                    {h.diagnostico                 && <Campo etq="Diagnóstico"               val={h.diagnostico} />}
+                    {h.evolucion                   && <Campo etq="Evolución"                 val={h.evolucion} />}
+                    {h.notas_sesion                && <Campo etq="Notas de sesión"           val={h.notas_sesion} />}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </>
+      )}
+
+      {tab === 'datos' && (
+        <>
+          <SeccionTitulo accion={
+            <button onClick={abrirEditar} className="text-sm font-semibold text-clinic-500 flex items-center gap-1">
+              <Pencil size={15} /> Editar
+            </button>
+          }>
+            Notas médicas generales
+          </SeccionTitulo>
+
+          {p.historial_medico_general ? (
+            <div className="card p-5 space-y-3">
+              <div className="flex items-center gap-2 text-[12px] font-bold text-clinic-500">
+                <FileText size={14} /> Historial médico general
               </div>
-            </li>
-          ))}
-        </ol>
+              <p className="text-[14px] text-clinic-700 whitespace-pre-line leading-relaxed">
+                {p.historial_medico_general}
+              </p>
+            </div>
+          ) : (
+            <Vacio icon={FileText} titulo="Sin notas médicas"
+              descripcion="Agrega antecedentes, alergias o condiciones relevantes del paciente."
+              accion={
+                <button onClick={abrirEditar} className="btn-primary">
+                  <Pencil size={18} /> Agregar notas médicas
+                </button>
+              } />
+          )}
+
+          {/* Resumen de diagnósticos de las sesiones */}
+          {historiales.some(h => h.diagnostico) && (
+            <section className="mt-2">
+              <SeccionTitulo>Diagnósticos registrados</SeccionTitulo>
+              <div className="space-y-2">
+                {historiales.filter(h => h.diagnostico).map(h => (
+                  <div key={h.id} className="card p-3.5 flex items-start gap-3">
+                    <div className="text-[11px] font-bold text-clinic-400 shrink-0 mt-0.5 w-24">
+                      {fechaCorta(h.fecha_atencion)}
+                    </div>
+                    <p className="text-[13px] text-clinic-700">{h.diagnostico}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       {/* ── Modal: registrar atención ── */}
-      <Modal abierto={modal} onClose={() => setModal(false)} titulo="Registrar atención"
+      <Modal
+        abierto={modal}
+        onClose={() => { if (!guardandoHist) setModal(false) }}
+        titulo="Registrar atención"
         footer={<>
-          <button onClick={() => setModal(false)} className="btn-ghost flex-1">Cancelar</button>
-          <button onClick={guardarHist} className="btn-primary flex-1"><NotebookPen size={18} /> Guardar</button>
+          <button onClick={() => setModal(false)} disabled={guardandoHist} className="btn-ghost flex-1">Cancelar</button>
+          <button onClick={guardarHist} disabled={guardandoHist} className="btn-primary flex-1">
+            {guardandoHist
+              ? <><Loader2 size={16} className="animate-spin" /> Guardando...</>
+              : <><NotebookPen size={18} /> Guardar</>}
+          </button>
         </>}>
         <div className="space-y-4">
           <div><label className="label">Fecha de atención</label>
@@ -326,10 +452,19 @@ export default function PacienteDetalle() {
 
       {/* ── Modal: editar datos del paciente ── */}
       {editForm && (
-        <Modal abierto={editModal} onClose={() => setEditModal(false)} titulo="Editar paciente"
+        <Modal
+          abierto={editModal}
+          onClose={() => { if (!guardandoEdit) setEditModal(false) }}
+          titulo="Editar paciente"
           footer={<>
-            <button onClick={() => setEditModal(false)} className="btn-ghost flex-1">Cancelar</button>
-            <button onClick={guardarEdicion} className="btn-primary flex-1"><Pencil size={17} /> Guardar cambios</button>
+            <button onClick={() => setEditModal(false)} disabled={guardandoEdit} className="btn-ghost flex-1">
+              Cancelar
+            </button>
+            <button onClick={guardarEdicion} disabled={guardandoEdit} className="btn-primary flex-1">
+              {guardandoEdit
+                ? <><Loader2 size={16} className="animate-spin" /> Guardando...</>
+                : <><Pencil size={17} /> Guardar cambios</>}
+            </button>
           </>}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -365,8 +500,7 @@ export default function PacienteDetalle() {
 
             {/* Zona peligrosa */}
             <div className="pt-3 border-t border-rose-100">
-              <button onClick={eliminarPaciente}
-                className="btn-soft-danger w-full gap-2">
+              <button onClick={eliminarPaciente} disabled={guardandoEdit} className="btn-soft-danger w-full gap-2">
                 <Trash2 size={16} /> Eliminar paciente definitivamente
               </button>
             </div>
@@ -376,13 +510,22 @@ export default function PacienteDetalle() {
 
       {/* ── Modal: agendar cita rápida ── */}
       {citaForm && (
-        <Modal abierto={citaModal} onClose={() => setCitaModal(false)} titulo="Agendar cita"
+        <Modal
+          abierto={citaModal}
+          onClose={() => { if (!guardandoCita) setCitaModal(false) }}
+          titulo="Agendar cita"
           footer={
             citaGuardada
               ? <button onClick={() => setCitaModal(false)} className="btn-primary w-full">Listo</button>
               : <>
-                  <button onClick={() => setCitaModal(false)} className="btn-ghost flex-1">Cancelar</button>
-                  <button onClick={guardarCita} className="btn-primary flex-1"><BadgeCheck size={17} /> Confirmar cita</button>
+                  <button onClick={() => setCitaModal(false)} disabled={guardandoCita} className="btn-ghost flex-1">
+                    Cancelar
+                  </button>
+                  <button onClick={guardarCita} disabled={guardandoCita} className="btn-primary flex-1">
+                    {guardandoCita
+                      ? <><Loader2 size={16} className="animate-spin" /> Guardando...</>
+                      : <><BadgeCheck size={17} /> Confirmar cita</>}
+                  </button>
                 </>
           }>
           {citaGuardada ? (

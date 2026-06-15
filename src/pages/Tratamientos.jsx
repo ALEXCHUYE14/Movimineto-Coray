@@ -5,7 +5,7 @@ import { Avatar, Vacio, SeccionTitulo, StatCard } from '../components/ui'
 import { iniciales, fechaCorta, hoyISO } from '../utils/format'
 import {
   ClipboardList, Plus, Search, ChevronRight,
-  CheckCircle2, Activity, Clock, BadgeCheck
+  CheckCircle2, Activity, Clock, BadgeCheck, Loader2
 } from 'lucide-react'
 
 const ESTADOS = ['Activo', 'Pausado', 'Finalizado']
@@ -31,17 +31,30 @@ export default function Tratamientos() {
   const [busqueda, setBusqueda]         = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Activo')
   const [modal, setModal]               = useState(false)
+  const [guardando, setGuardando]       = useState(false)
   const [modalDetalle, setModalDetalle] = useState(null)
   const [form, setForm]                 = useState(vacioForm())
 
+  // Recarga la lista y sincroniza el detalle abierto para evitar datos stale
   const cargar = async () => {
     setCargando(true)
-    const { data } = await supabase
-      .from('tratamientos')
-      .select('*, pacientes(id, nombres, apellidos)')
-      .order('creado_en', { ascending: false })
-    setTratamientos(data || [])
-    setCargando(false)
+    try {
+      const { data } = await supabase
+        .from('tratamientos')
+        .select('*, pacientes(id, nombres, apellidos)')
+        .order('creado_en', { ascending: false })
+      const lista = data || []
+      setTratamientos(lista)
+      // Mantener el modal de detalle actualizado si estaba abierto
+      setModalDetalle(prev => {
+        if (!prev) return null
+        return lista.find(t => t.id === prev.id) || null
+      })
+    } catch {
+      // mantener datos anteriores en error de red
+    } finally {
+      setCargando(false)
+    }
   }
 
   useEffect(() => {
@@ -53,37 +66,54 @@ export default function Tratamientos() {
 
   const guardar = async () => {
     if (!form.paciente_id || !form.nombre_tratamiento.trim()) return
-    await supabase.from('tratamientos').insert({
-      paciente_id:          form.paciente_id,
-      nombre_tratamiento:   form.nombre_tratamiento.trim(),
-      diagnostico:          form.diagnostico.trim()    || null,
-      objetivos:            form.objetivos.trim()      || null,
-      plan_sesiones:        form.plan_sesiones.trim()  || null,
-      sesiones_previstas:   Number(form.sesiones_previstas) || 10,
-      sesiones_completadas: 0,
-      fecha_inicio:         form.fecha_inicio,
-      fecha_fin_estimada:   form.fecha_fin_estimada    || null,
-      observaciones:        form.observaciones.trim()  || null
-    })
-    setModal(false)
-    setForm(vacioForm())
-    cargar()
+    setGuardando(true)
+    try {
+      const { error } = await supabase.from('tratamientos').insert({
+        paciente_id:          form.paciente_id,
+        nombre_tratamiento:   form.nombre_tratamiento.trim(),
+        diagnostico:          form.diagnostico.trim()   || null,
+        objetivos:            form.objetivos.trim()     || null,
+        plan_sesiones:        form.plan_sesiones.trim() || null,
+        sesiones_previstas:   Number(form.sesiones_previstas) || 10,
+        sesiones_completadas: 0,
+        fecha_inicio:         form.fecha_inicio,
+        fecha_fin_estimada:   form.fecha_fin_estimada   || null,
+        observaciones:        form.observaciones.trim() || null
+      })
+      if (error) throw error
+      setModal(false)
+      setForm(vacioForm())
+      cargar()
+    } catch {
+      alert('No se pudo registrar el tratamiento. Intenta nuevamente.')
+    } finally {
+      setGuardando(false)
+    }
   }
 
   const marcarSesion = async (t) => {
     if (t.sesiones_completadas >= t.sesiones_previstas) return
     const completadas = t.sesiones_completadas + 1
     const estado = completadas >= t.sesiones_previstas ? 'Finalizado' : t.estado
-    await supabase.from('tratamientos')
-      .update({ sesiones_completadas: completadas, estado })
-      .eq('id', t.id)
-    cargar()
+    try {
+      const { error } = await supabase.from('tratamientos')
+        .update({ sesiones_completadas: completadas, estado })
+        .eq('id', t.id)
+      if (error) throw error
+      cargar()
+    } catch {
+      alert('No se pudo marcar la sesión. Intenta nuevamente.')
+    }
   }
 
   const cambiarEstado = async (id, estado) => {
-    await supabase.from('tratamientos').update({ estado }).eq('id', id)
-    setModalDetalle(null)
-    cargar()
+    try {
+      const { error } = await supabase.from('tratamientos').update({ estado }).eq('id', id)
+      if (error) throw error
+      cargar()
+    } catch {
+      alert('No se pudo cambiar el estado. Intenta nuevamente.')
+    }
   }
 
   const stats = useMemo(() => ({
@@ -109,9 +139,9 @@ export default function Tratamientos() {
 
       {/* Estadísticas */}
       <div className="grid grid-cols-3 gap-3">
-        <StatCard icon={Activity}      label="Activos"     value={stats.activos}     accent="mint" />
-        <StatCard icon={Clock}         label="Pausados"    value={stats.pausados}    accent="amber" />
-        <StatCard icon={BadgeCheck}    label="Finalizados" value={stats.finalizados} accent="clinic" />
+        <StatCard icon={Activity}   label="Activos"     value={stats.activos}     accent="mint" />
+        <StatCard icon={Clock}      label="Pausados"    value={stats.pausados}    accent="amber" />
+        <StatCard icon={BadgeCheck} label="Finalizados" value={stats.finalizados} accent="clinic" />
       </div>
 
       {/* Barra búsqueda + nuevo */}
@@ -236,14 +266,21 @@ export default function Tratamientos() {
       )}
 
       {/* ── Modal: Nuevo tratamiento ── */}
-      <Modal abierto={modal} onClose={() => setModal(false)} titulo="Nuevo tratamiento"
+      <Modal
+        abierto={modal}
+        onClose={() => { if (!guardando) setModal(false) }}
+        titulo="Nuevo tratamiento"
         footer={<>
-          <button onClick={() => setModal(false)} className="btn-ghost flex-1">Cancelar</button>
+          <button onClick={() => setModal(false)} disabled={guardando} className="btn-ghost flex-1">
+            Cancelar
+          </button>
           <button
             onClick={guardar}
-            disabled={!form.paciente_id || !form.nombre_tratamiento.trim()}
+            disabled={guardando || !form.paciente_id || !form.nombre_tratamiento.trim()}
             className="btn-primary flex-1 disabled:opacity-40">
-            <ClipboardList size={18} /> Registrar
+            {guardando
+              ? <><Loader2 size={16} className="animate-spin" /> Registrando...</>
+              : <><ClipboardList size={18} /> Registrar</>}
           </button>
         </>}>
         <div className="space-y-4">
@@ -316,7 +353,7 @@ export default function Tratamientos() {
         <Modal abierto={true} onClose={() => setModalDetalle(null)} titulo="Detalle del tratamiento"
           footer={<button onClick={() => setModalDetalle(null)} className="btn-ghost w-full">Cerrar</button>}>
           <div className="space-y-4">
-            {/* Cabecera del detalle */}
+            {/* Cabecera */}
             <div className="bg-clinic-50 rounded-xl px-4 py-3 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-bold text-clinic-800">{modalDetalle.nombre_tratamiento}</p>

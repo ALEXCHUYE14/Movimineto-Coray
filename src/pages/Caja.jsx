@@ -7,7 +7,7 @@ import { imprimirTicket } from '../utils/print'
 import {
   Wallet, Plus, TrendingUp, TrendingDown, CalendarDays,
   Banknote, Smartphone, CreditCard, Printer, Lock,
-  ArrowDownRight, ArrowUpRight, MinusCircle
+  ArrowDownRight, Loader2
 } from 'lucide-react'
 
 const METODOS = ['Efectivo', 'Yape', 'Plin', 'Transferencia', 'Tarjeta']
@@ -19,25 +19,32 @@ const iconoMetodo = {
 }
 
 export default function Caja() {
-  const [ingresos, setIngresos]           = useState([])
-  const [egresos, setEgresos]             = useState([])
-  const [pacientes, setPacientes]         = useState([])
-  const [cargando, setCargando]           = useState(true)
-  const [modal, setModal]                 = useState(false)
-  const [modalEgreso, setModalEgreso]     = useState(false)
-  const [modalCierre, setModalCierre]     = useState(false)
-  const [form, setForm]                   = useState(null)
-  const [formEgreso, setFormEgreso]       = useState(null)
+  const [ingresos, setIngresos]       = useState([])
+  const [egresos, setEgresos]         = useState([])
+  const [pacientes, setPacientes]     = useState([])
+  const [cargando, setCargando]       = useState(true)
+  const [modal, setModal]             = useState(false)
+  const [modalEgreso, setModalEgreso] = useState(false)
+  const [modalCierre, setModalCierre] = useState(false)
+  const [form, setForm]               = useState(null)
+  const [formEgreso, setFormEgreso]   = useState(null)
+  const [guardandoIng, setGuardandoIng] = useState(false)
+  const [guardandoEgr, setGuardandoEgr] = useState(false)
 
   const cargar = async () => {
     setCargando(true)
+    // Traer TODOS los registros del mes en curso (sin límite) para garantizar
+    // que las estadísticas sean exactas aunque haya más de 100 transacciones.
+    const inicioMes = hoyISO().slice(0, 8) + '01'
     const [{ data: ing }, { data: egr }] = await Promise.all([
       supabase.from('ingresos_caja')
         .select('*, pacientes(nombres, apellidos)')
-        .order('fecha_pago', { ascending: false }).limit(100),
+        .gte('fecha_pago', inicioMes)
+        .order('fecha_pago', { ascending: false }),
       supabase.from('egresos_caja')
         .select('*')
-        .order('fecha_egreso', { ascending: false }).limit(100)
+        .gte('fecha_egreso', inicioMes)
+        .order('fecha_egreso', { ascending: false })
     ])
     setIngresos(ing || [])
     setEgresos(egr || [])
@@ -58,17 +65,17 @@ export default function Caja() {
 
   const guardarIngreso = async () => {
     if (!form.monto || Number(form.monto) <= 0) return
-    const { data: nuevo } = await supabase.from('ingresos_caja').insert({
-      paciente_id: form.paciente_id || null,
-      concepto:    form.concepto || 'Atención',
-      monto:       Number(form.monto),
-      metodo_pago: form.metodo_pago
-    }).select().single()
-
-    setModal(false)
-    cargar()
-
-    if (nuevo) {
+    setGuardandoIng(true)
+    try {
+      const { data: nuevo, error } = await supabase.from('ingresos_caja').insert({
+        paciente_id: form.paciente_id || null,
+        concepto:    form.concepto || 'Atención',
+        monto:       Number(form.monto),
+        metodo_pago: form.metodo_pago
+      }).select().single()
+      if (error) throw error
+      setModal(false)
+      await cargar()
       const pac = form.paciente_id
         ? pacientes.find(p => p.id === form.paciente_id) || null
         : null
@@ -76,6 +83,10 @@ export default function Caja() {
         ...nuevo,
         pacientes: pac ? { nombres: pac.nombres, apellidos: pac.apellidos } : null
       })
+    } catch {
+      alert('No se pudo registrar el pago. Verifica tu conexión e intenta nuevamente.')
+    } finally {
+      setGuardandoIng(false)
     }
   }
 
@@ -87,29 +98,36 @@ export default function Caja() {
 
   const guardarEgreso = async () => {
     if (!formEgreso.concepto.trim() || !formEgreso.monto || Number(formEgreso.monto) <= 0) return
-    await supabase.from('egresos_caja').insert({
-      concepto:  formEgreso.concepto.trim(),
-      monto:     Number(formEgreso.monto),
-      categoria: formEgreso.categoria
-    })
-    setModalEgreso(false)
-    cargar()
+    setGuardandoEgr(true)
+    try {
+      const { error } = await supabase.from('egresos_caja').insert({
+        concepto:  formEgreso.concepto.trim(),
+        monto:     Number(formEgreso.monto),
+        categoria: formEgreso.categoria
+      })
+      if (error) throw error
+      setModalEgreso(false)
+      cargar()
+    } catch {
+      alert('No se pudo registrar el egreso. Verifica tu conexión e intenta nuevamente.')
+    } finally {
+      setGuardandoEgr(false)
+    }
   }
 
   // ── Estadísticas ─────────────────────────────────────────────────────────
   const { totalMes, totalHoy, egresosMes, egresosHoy } = useMemo(() => {
     const hoy = hoyISO()
-    const inicioMes = hoy.slice(0, 8) + '01'
     let ingMes = 0, ingHoy = 0, egrMes = 0, egrHoy = 0
     ingresos.forEach(i => {
-      const f = i.fecha_pago.slice(0, 10)
-      if (f >= inicioMes) ingMes += Number(i.monto)
-      if (f === hoy)      ingHoy += Number(i.monto)
+      const f = i.fecha_pago?.slice(0, 10)
+      ingMes += Number(i.monto)          // todos ya son del mes
+      if (f === hoy) ingHoy += Number(i.monto)
     })
     egresos.forEach(e => {
-      const f = e.fecha_egreso.slice(0, 10)
-      if (f >= inicioMes) egrMes += Number(e.monto)
-      if (f === hoy)      egrHoy += Number(e.monto)
+      const f = e.fecha_egreso?.slice(0, 10)
+      egrMes += Number(e.monto)          // todos ya son del mes
+      if (f === hoy) egrHoy += Number(e.monto)
     })
     return { totalMes: ingMes, totalHoy: ingHoy, egresosMes: egrMes, egresosHoy: egrHoy }
   }, [ingresos, egresos])
@@ -118,23 +136,20 @@ export default function Caja() {
   const movimientos = useMemo(() => {
     const ing = ingresos.map(i => ({ ...i, tipo: 'ingreso', fecha: i.fecha_pago }))
     const egr = egresos.map(e => ({ ...e, tipo: 'egreso',  fecha: e.fecha_egreso }))
-    return [...ing, ...egr]
-      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
-      .slice(0, 100)
+    return [...ing, ...egr].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
   }, [ingresos, egresos])
 
   // ── Resumen del día para cierre ──────────────────────────────────────────
   const resumenHoy = useMemo(() => {
     const hoy = hoyISO()
-    const ingHoy = ingresos.filter(i => i.fecha_pago.slice(0, 10) === hoy)
-    const egrHoy = egresos.filter(e => e.fecha_egreso.slice(0, 10) === hoy)
+    const ingHoy = ingresos.filter(i => i.fecha_pago?.slice(0, 10) === hoy)
+    const egrHoy = egresos.filter(e => e.fecha_egreso?.slice(0, 10) === hoy)
     const porMetodo = {}
     ingHoy.forEach(i => {
       porMetodo[i.metodo_pago] = (porMetodo[i.metodo_pago] || 0) + Number(i.monto)
     })
     return {
-      ingHoy,
-      egrHoy,
+      ingHoy, egrHoy,
       totalIngresos: totalHoy,
       totalEgresos:  egresosHoy,
       balance:       totalHoy - egresosHoy,
@@ -223,15 +238,13 @@ export default function Caja() {
   return (
     <div className="space-y-5">
 
-      {/* Acciones rápidas — encima de las tarjetas */}
+      {/* Acciones rápidas */}
       <div className="flex gap-2">
-        <button
-          onClick={abrirEgreso}
+        <button onClick={abrirEgreso}
           className="btn-ghost flex-1 flex items-center justify-center gap-1.5">
-          <MinusCircle size={18} /> Registrar egreso
+          <ArrowDownRight size={18} /> Registrar egreso
         </button>
-        <button
-          onClick={() => setModalCierre(true)}
+        <button onClick={() => setModalCierre(true)}
           className="btn-danger flex-1 flex items-center justify-center gap-1.5">
           <Lock size={16} /> Cerrar caja
         </button>
@@ -252,7 +265,7 @@ export default function Caja() {
         </button>
       </div>
 
-      <SeccionTitulo>Movimientos recientes</SeccionTitulo>
+      <SeccionTitulo>Movimientos del mes</SeccionTitulo>
 
       {cargando ? (
         <div className="card p-8 text-center text-clinic-300">Cargando...</div>
@@ -306,10 +319,19 @@ export default function Caja() {
       )}
 
       {/* ── Modal: Registrar pago (ingreso) ── */}
-      <Modal abierto={modal} onClose={() => setModal(false)} titulo="Registrar pago"
+      <Modal
+        abierto={modal}
+        onClose={() => { if (!guardandoIng) setModal(false) }}
+        titulo="Registrar pago"
         footer={<>
-          <button onClick={() => setModal(false)} className="btn-ghost flex-1">Cancelar</button>
-          <button onClick={guardarIngreso} className="btn-mint flex-1"><Wallet size={18} /> Guardar e imprimir</button>
+          <button onClick={() => setModal(false)} disabled={guardandoIng} className="btn-ghost flex-1">
+            Cancelar
+          </button>
+          <button onClick={guardarIngreso} disabled={guardandoIng} className="btn-mint flex-1">
+            {guardandoIng
+              ? <><Loader2 size={16} className="animate-spin" /> Guardando...</>
+              : <><Wallet size={18} /> Guardar e imprimir</>}
+          </button>
         </>}>
         {form && (
           <div className="space-y-4">
@@ -356,14 +378,21 @@ export default function Caja() {
       </Modal>
 
       {/* ── Modal: Registrar egreso ── */}
-      <Modal abierto={modalEgreso} onClose={() => setModalEgreso(false)} titulo="Registrar egreso"
+      <Modal
+        abierto={modalEgreso}
+        onClose={() => { if (!guardandoEgr) setModalEgreso(false) }}
+        titulo="Registrar egreso"
         footer={<>
-          <button onClick={() => setModalEgreso(false)} className="btn-ghost flex-1">Cancelar</button>
+          <button onClick={() => setModalEgreso(false)} disabled={guardandoEgr} className="btn-ghost flex-1">
+            Cancelar
+          </button>
           <button
             onClick={guardarEgreso}
-            disabled={!formEgreso?.concepto?.trim() || !formEgreso?.monto || Number(formEgreso?.monto) <= 0}
+            disabled={guardandoEgr || !formEgreso?.concepto?.trim() || !formEgreso?.monto || Number(formEgreso?.monto) <= 0}
             className="btn-primary flex-1 disabled:opacity-40">
-            <ArrowDownRight size={18} /> Registrar egreso
+            {guardandoEgr
+              ? <><Loader2 size={16} className="animate-spin" /> Registrando...</>
+              : <><ArrowDownRight size={18} /> Registrar egreso</>}
           </button>
         </>}>
         {formEgreso && (

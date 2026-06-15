@@ -4,7 +4,10 @@ import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { Avatar, Vacio } from '../components/ui'
 import { iniciales, edad } from '../utils/format'
-import { Search, Plus, ChevronRight, UserPlus, Phone, Users, CreditCard, Trash2 } from 'lucide-react'
+import {
+  Search, Plus, ChevronRight, UserPlus, Phone,
+  Users, CreditCard, Trash2, Loader2
+} from 'lucide-react'
 
 const esSoloDigitos = (s) => /^\d+$/.test(s.trim())
 
@@ -13,6 +16,7 @@ export default function Pacientes() {
   const [busqueda, setBusqueda]   = useState('')
   const [cargando, setCargando]   = useState(true)
   const [modal, setModal]         = useState(false)
+  const [guardando, setGuardando] = useState(false)
   const [form, setForm]           = useState(vacio())
 
   function vacio() {
@@ -33,18 +37,31 @@ export default function Pacientes() {
 
   const guardar = async () => {
     if (!form.nombres.trim() || !form.apellidos.trim()) return
-    await supabase.from('pacientes').insert({
-      ...form,
-      fecha_nacimiento: form.fecha_nacimiento || null,
-      dni: form.dni.trim() || null
-    })
-    setForm(vacio()); setModal(false); cargar()
+    setGuardando(true)
+    try {
+      const { error } = await supabase.from('pacientes').insert({
+        ...form,
+        fecha_nacimiento: form.fecha_nacimiento || null,
+        dni: form.dni.trim() || null
+      })
+      if (error) throw error
+      setForm(vacio()); setModal(false); cargar()
+    } catch {
+      alert('No se pudo registrar el paciente. Verifica tu conexión e intenta nuevamente.')
+    } finally {
+      setGuardando(false)
+    }
   }
 
   const eliminar = async (id, nombre) => {
     if (!confirm(`¿Eliminar definitivamente a ${nombre}?\nEsta acción no se puede deshacer.`)) return
-    await supabase.from('pacientes').delete().eq('id', id)
-    cargar()
+    try {
+      const { error } = await supabase.from('pacientes').delete().eq('id', id)
+      if (error) throw error
+      cargar()
+    } catch {
+      alert('No se pudo eliminar el paciente. Intenta nuevamente.')
+    }
   }
 
   const q = busqueda.trim()
@@ -109,8 +126,8 @@ export default function Pacientes() {
       ) : (
         <div className="space-y-2.5">
           {filtrados.map(p => (
-            <div key={p.id} className="card p-3.5 flex items-center gap-3 hover:shadow-float transition-shadow animate-fade-up">
-              {/* Área principal → navega al detalle */}
+            <div key={p.id}
+              className="card p-3.5 flex items-center gap-3 hover:shadow-float transition-shadow animate-fade-up">
               <Link to={`/pacientes/${p.id}`} className="flex items-center gap-3 flex-1 min-w-0">
                 <Avatar texto={iniciales(p.nombres, p.apellidos)} size={46} />
                 <div className="min-w-0 flex-1">
@@ -135,7 +152,6 @@ export default function Pacientes() {
                 <ChevronRight size={18} className="text-clinic-300 shrink-0" />
               </Link>
 
-              {/* Botón eliminar (no navega) */}
               <button
                 onClick={() => eliminar(p.id, `${p.nombres} ${p.apellidos}`)}
                 className="grid place-items-center w-9 h-9 rounded-full text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
@@ -149,10 +165,18 @@ export default function Pacientes() {
 
       {/* Modal nuevo paciente */}
       <Modal
-        abierto={modal} onClose={() => setModal(false)} titulo="Nuevo paciente"
+        abierto={modal}
+        onClose={() => { if (!guardando) setModal(false) }}
+        titulo="Nuevo paciente"
         footer={<>
-          <button onClick={() => setModal(false)} className="btn-ghost flex-1">Cancelar</button>
-          <button onClick={guardar} className="btn-primary flex-1"><UserPlus size={18} /> Registrar</button>
+          <button onClick={() => setModal(false)} disabled={guardando} className="btn-ghost flex-1">
+            Cancelar
+          </button>
+          <button onClick={guardar} disabled={guardando} className="btn-primary flex-1">
+            {guardando
+              ? <><Loader2 size={16} className="animate-spin" /> Registrando...</>
+              : <><UserPlus size={18} /> Registrar</>}
+          </button>
         </>}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
