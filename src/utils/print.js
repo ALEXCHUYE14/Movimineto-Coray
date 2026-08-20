@@ -530,3 +530,363 @@ export function imprimirDiagnostico(paciente, historiales, edadAnos) {
 
   abrirVentana(html)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECETA / INDICACIONES TERAPÉUTICAS  (formato A4 profesional)
+// ─────────────────────────────────────────────────────────────────────────────
+export function imprimirReceta(paciente, receta, edadAnos) {
+  const logoUrl = `${window.location.origin}${LOGO_SRC}`
+
+  const fmtFecha = (iso) => {
+    if (!iso) return ''
+    const d = new Date(iso + 'T12:00:00')
+    return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
+  }
+
+  const fechaEmision = receta.fecha_emision || new Date().toISOString().slice(0, 10)
+  const fechaDoc      = fmtFecha(fechaEmision)
+  const numDoc = `MK-IND-${fechaEmision.replace(/-/g, '')}-${(paciente.dni || '').slice(-4).padStart(4, '0')}`
+
+  const indicaciones = Array.isArray(receta.indicaciones) ? receta.indicaciones : []
+
+  const filasIndicaciones = indicaciones.length === 0
+    ? `<tr><td colspan="4" class="ind-vacio">Sin indicaciones registradas.</td></tr>`
+    : indicaciones.map((it, i) => `
+        <tr>
+          <td class="ind-num">${i + 1}</td>
+          <td class="ind-desc">${(it.indicacion || '').replace(/\n/g, '<br>')}</td>
+          <td class="ind-frec">${it.frecuencia || '—'}</td>
+          <td class="ind-dur">${it.duracion || '—'}</td>
+        </tr>`).join('')
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Indicaciones Terapéuticas — ${paciente.nombres} ${paciente.apellidos}</title>
+<style>
+  @page { size: A4; margin: 0; }
+  @media print {
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { display: none !important; }
+    body      { margin: 0; }
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 11.5px;
+    color: #1e2d3d;
+    background: #f0f4f8;
+    line-height: 1.65;
+  }
+
+  .no-print {
+    position: fixed; top: 16px; right: 16px; z-index: 999;
+    display: flex; gap: 10px;
+  }
+  .btn-pdf {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 11px 22px; font-size: 14px; cursor: pointer;
+    background: #1d6fa4; color: white; border: none;
+    border-radius: 8px; font-weight: 700; font-family: inherit;
+    box-shadow: 0 4px 14px rgba(29,111,164,0.4);
+    transition: background 0.15s;
+  }
+  .btn-pdf:hover { background: #15588a; }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    background: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .sidebar {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 7mm;
+    background: linear-gradient(180deg, #1d6fa4 0%, #15a98e 100%);
+  }
+  .content {
+    margin-left: 7mm;
+    padding: 12mm 14mm 12mm 12mm;
+    min-height: 297mm;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-bottom: 10mm;
+    border-bottom: 0.5px solid #c9dce9;
+    margin-bottom: 8mm;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .logo {
+    width: 52px; height: 52px;
+    border-radius: 10px; object-fit: cover; flex-shrink: 0;
+    border: 2px solid #ddeef8;
+  }
+  .logo-mk {
+    width: 52px; height: 52px; border-radius: 10px; flex-shrink: 0;
+    background: linear-gradient(135deg, #1d6fa4 0%, #15a98e 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 900; font-size: 18px; letter-spacing: -1px;
+    border: 2px solid #ddeef8;
+  }
+  .clinic-block { line-height: 1.4; }
+  .clinic-name  { font-size: 15px; font-weight: 800; color: #1a2e42; letter-spacing: -0.3px; }
+  .clinic-sub   { font-size: 10px; color: #5490b5; margin-top: 2px; }
+  .clinic-contact { font-size: 10px; color: #7aafc7; margin-top: 1px; }
+
+  .header-right { text-align: right; }
+  .doc-type {
+    font-size: 17px; font-weight: 900; letter-spacing: -0.5px;
+    color: #1d6fa4; text-transform: uppercase;
+  }
+  .doc-subtitle { font-size: 9.5px; color: #7aafc7; margin-top: 3px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .doc-num {
+    margin-top: 5px;
+    display: inline-block;
+    font-size: 10px; font-weight: 700; color: #1a2e42;
+    background: #eaf3fb; border: 1px solid #c9dce9;
+    padding: 3px 9px; border-radius: 20px; letter-spacing: 0.03em;
+  }
+
+  .ficha {
+    background: linear-gradient(135deg, #eaf3fb 0%, #e7f8f4 100%);
+    border: 1px solid #c9dce9;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 8mm;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .ficha-avatar {
+    width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, #1d6fa4 0%, #15a98e 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 900; font-size: 16px; letter-spacing: -1px;
+    border: 2.5px solid #fff;
+    box-shadow: 0 2px 8px rgba(29,111,164,0.25);
+  }
+  .ficha-datos { flex: 1; }
+  .ficha-nombre { font-size: 15px; font-weight: 800; color: #1a2e42; line-height: 1.2; }
+  .ficha-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 6px 10px; margin-top: 7px;
+  }
+  .ficha-item-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #7aafc7; }
+  .ficha-item-val   { font-size: 11px; font-weight: 600; color: #1a2e42; margin-top: 1px; }
+  .ficha-item-val.empty { color: #aac5d8; font-style: italic; font-weight: 400; font-size: 10.5px; }
+
+  .section-label {
+    display: flex; align-items: center; gap: 7px;
+    margin-bottom: 6px;
+  }
+  .section-label-line { flex: 1; height: 1px; background: #c9dce9; }
+  .section-label-text {
+    font-size: 8.5px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.1em; color: #5490b5; white-space: nowrap;
+    padding: 0 4px;
+  }
+  .antecedentes-box {
+    background: #f8fafc; border: 1px solid #ddeef8;
+    border-left: 3px solid #5490b5;
+    border-radius: 0 8px 8px 0;
+    padding: 9px 12px;
+    font-size: 11.5px; color: #2e4a61;
+    white-space: pre-line; line-height: 1.65;
+    margin-bottom: 8mm;
+  }
+
+  /* ───── TABLA DE INDICACIONES ───── */
+  .ind-tabla {
+    width: 100%; border-collapse: collapse;
+    border: 1px solid #ddeef8; border-radius: 8px;
+    overflow: hidden; background: #fff;
+    margin-bottom: 8mm;
+  }
+  .ind-tabla th {
+    background: #1d6fa4; color: #fff;
+    font-size: 9px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; text-align: left;
+    padding: 7px 10px;
+  }
+  .ind-tabla th:first-child { width: 8%; text-align: center; }
+  .ind-tabla th:nth-child(3), .ind-tabla th:nth-child(4) { width: 18%; }
+  .ind-tabla td {
+    padding: 8px 10px; font-size: 11px; color: #1e2d3d;
+    border-bottom: 1px solid #eef5fb; vertical-align: top;
+  }
+  .ind-tabla tr:last-child td { border-bottom: none; }
+  .ind-num { text-align: center; font-weight: 700; color: #5490b5; }
+  .ind-vacio { text-align: center; color: #aac5d8; font-style: italic; padding: 16px 0; }
+
+  .control-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #eafaf4; border: 1px solid #bfeadb;
+    color: #0f7a5c; font-weight: 700; font-size: 11px;
+    padding: 6px 12px; border-radius: 20px; margin-bottom: 8mm;
+  }
+
+  .spacer { flex: 1; }
+
+  .footer {
+    margin-top: 10mm;
+    padding-top: 6mm;
+    border-top: 1px solid #c9dce9;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .footer-info { font-size: 9.5px; color: #7aafc7; line-height: 1.8; max-width: 95mm; }
+  .footer-info strong { color: #5490b5; }
+  .footer-badge {
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; color: #aac5d8;
+    border: 1px solid #ddeef8; padding: 3px 9px; border-radius: 20px;
+    margin-top: 5px; display: inline-block;
+  }
+  .firma-block { text-align: center; }
+  .firma-line { width: 160px; border-top: 1.5px solid #1a2e42; margin: 0 auto 5px; }
+  .firma-name  { font-size: 11.5px; font-weight: 700; color: #1a2e42; }
+  .firma-cargo { font-size: 9.5px; color: #5490b5; margin-top: 2px; }
+  .firma-cod   { font-size: 9px; color: #7aafc7; margin-top: 1px; }
+</style>
+</head>
+<body>
+
+  <div class="no-print">
+    <button class="btn-pdf" onclick="window.print()">⬇&nbsp; Guardar PDF / Imprimir</button>
+  </div>
+
+  <div class="page">
+    <div class="sidebar"></div>
+
+    <div class="content">
+
+      <!-- ═══ HEADER ═══ -->
+      <div class="header">
+        <div class="header-left">
+          <img class="logo" src="${logoUrl}"
+            onerror="this.outerHTML='<div class=\\'logo-mk\\'>MK</div>'" />
+          <div class="clinic-block">
+            <div class="clinic-name">Movimiento Koray</div>
+            <div class="clinic-sub">Centro de Terapia Física y Rehabilitación</div>
+            <div class="clinic-contact">Cel: 996 113 188 &nbsp;·&nbsp; Lima, Perú</div>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="doc-type">Indicaciones Terapéuticas</div>
+          <div class="doc-subtitle">Fisioterapia y Rehabilitación</div>
+          <div class="doc-num">${numDoc}</div>
+        </div>
+      </div>
+
+      <!-- ═══ FICHA PACIENTE ═══ -->
+      <div class="ficha">
+        <div class="ficha-avatar">${(paciente.nombres||'?')[0]}${(paciente.apellidos||'?')[0]}</div>
+        <div class="ficha-datos">
+          <div class="ficha-nombre">${paciente.nombres} ${paciente.apellidos}</div>
+          <div class="ficha-grid">
+            <div class="ficha-item">
+              <div class="ficha-item-label">DNI</div>
+              <div class="ficha-item-val ${!paciente.dni ? 'empty' : ''}">${paciente.dni || 'No registrado'}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Edad</div>
+              <div class="ficha-item-val ${edadAnos == null ? 'empty' : ''}">${edadAnos != null ? edadAnos + ' años' : 'No registrada'}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Celular</div>
+              <div class="ficha-item-val ${!paciente.celular ? 'empty' : ''}">${paciente.celular || 'No registrado'}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Fecha de emisión</div>
+              <div class="ficha-item-val">${fechaDoc}</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">Especialidad</div>
+              <div class="ficha-item-val">Fisioterapia</div>
+            </div>
+            <div class="ficha-item">
+              <div class="ficha-item-label">N° indicaciones</div>
+              <div class="ficha-item-val">${indicaciones.length}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ DIAGNÓSTICO / MOTIVO ═══ -->
+      ${receta.diagnostico ? `
+        <div class="section-label">
+          <span class="section-label-text">Diagnóstico / Motivo</span>
+          <div class="section-label-line"></div>
+        </div>
+        <div class="antecedentes-box">${receta.diagnostico.replace(/\n/g, '<br>')}</div>
+      ` : ''}
+
+      <!-- ═══ INDICACIONES TERAPÉUTICAS ═══ -->
+      <div class="section-label">
+        <span class="section-label-text">Indicaciones terapéuticas</span>
+        <div class="section-label-line"></div>
+      </div>
+      <table class="ind-tabla">
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Indicación</th>
+            <th>Frecuencia</th>
+            <th>Duración</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filasIndicaciones}
+        </tbody>
+      </table>
+
+      <!-- ═══ RECOMENDACIONES GENERALES ═══ -->
+      ${receta.recomendaciones ? `
+        <div class="section-label">
+          <span class="section-label-text">Recomendaciones generales</span>
+          <div class="section-label-line"></div>
+        </div>
+        <div class="antecedentes-box" style="margin-bottom:5mm">${receta.recomendaciones.replace(/\n/g, '<br>')}</div>
+      ` : ''}
+
+      <!-- ═══ PRÓXIMO CONTROL ═══ -->
+      ${receta.proximo_control ? `
+        <div class="control-badge">📅&nbsp; Próximo control: ${fmtFecha(receta.proximo_control)}</div>
+      ` : ''}
+
+      <!-- Empuja el footer al fondo -->
+      <div class="spacer"></div>
+
+      <!-- ═══ FOOTER ═══ -->
+      <div class="footer">
+        <div class="footer-info">
+          <div>Centro de Terapia Física <strong>Movimiento Koray</strong></div>
+          <div>Documento generado el ${fechaDoc}</div>
+          <div class="footer-badge">No constituye receta farmacológica</div>
+        </div>
+        <div class="firma-block">
+          <div class="firma-line"></div>
+          <div class="firma-name">Diego M. Espinoza Guerrero</div>
+          <div class="firma-cargo">Fisioterapeuta Titulado</div>
+          <div class="firma-cod">Especialista en Rehabilitación Física</div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /page -->
+
+</body>
+</html>`
+
+  abrirVentana(html)
+}

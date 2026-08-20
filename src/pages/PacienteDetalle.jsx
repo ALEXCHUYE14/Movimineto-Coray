@@ -4,11 +4,12 @@ import { supabase } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { Avatar, Vacio, SeccionTitulo } from '../components/ui'
 import { iniciales, edad, soles, fechaCorta, hoyISO, linkWhatsAppPaciente } from '../utils/format'
-import { imprimirDiagnostico } from '../utils/print'
+import { imprimirDiagnostico, imprimirReceta } from '../utils/print'
 import {
   ArrowLeft, Phone, MessageCircle, PackageCheck, Plus, FileText,
   Stethoscope, CalendarClock, Cake, NotebookPen, CreditCard,
-  Pencil, CalendarPlus, BadgeCheck, Trash2, FileDown, Loader2, AlertCircle
+  Pencil, CalendarPlus, BadgeCheck, Trash2, FileDown, Loader2, AlertCircle,
+  ClipboardList
 } from 'lucide-react'
 
 export default function PacienteDetalle() {
@@ -20,6 +21,7 @@ export default function PacienteDetalle() {
   const [noEncontrado, setNoEncontrado] = useState(false)
   const [paquetes, setPaquetes]       = useState([])
   const [historiales, setHistoriales] = useState([])
+  const [recetas, setRecetas]         = useState([])
   const [servicios, setServicios]     = useState([])
   const [tab, setTab]                 = useState('historial')
 
@@ -27,6 +29,11 @@ export default function PacienteDetalle() {
   const [modal, setModal]         = useState(false)
   const [form, setForm]           = useState(vacioHist())
   const [guardandoHist, setGuardandoHist] = useState(false)
+
+  // Modal: nueva receta / indicaciones terapéuticas
+  const [recetaModal, setRecetaModal]         = useState(false)
+  const [recetaForm, setRecetaForm]           = useState(vacioReceta())
+  const [guardandoReceta, setGuardandoReceta] = useState(false)
 
   // Modal: editar datos del paciente
   const [editModal, setEditModal]   = useState(false)
@@ -47,11 +54,21 @@ export default function PacienteDetalle() {
     }
   }
 
+  function vacioReceta() {
+    return {
+      diagnostico: '',
+      indicaciones: [{ indicacion: '', frecuencia: '', duracion: '' }],
+      recomendaciones: '',
+      proximo_control: ''
+    }
+  }
+
   const cargar = async () => {
-    const [pac, paq, hist] = await Promise.all([
+    const [pac, paq, hist, rec] = await Promise.all([
       supabase.from('pacientes').select('*').eq('id', id).maybeSingle(),
       supabase.from('paquetes_adquiridos').select('*').eq('paciente_id', id).order('creado_en', { ascending: false }),
-      supabase.from('historiales_clinicos').select('*').eq('paciente_id', id).order('fecha_atencion', { ascending: false })
+      supabase.from('historiales_clinicos').select('*').eq('paciente_id', id).order('fecha_atencion', { ascending: false }),
+      supabase.from('recetas_medicas').select('*').eq('paciente_id', id).order('fecha_emision', { ascending: false })
     ])
     if (!pac.data) {
       setNoEncontrado(true)
@@ -61,6 +78,7 @@ export default function PacienteDetalle() {
     }
     setPaquetes(paq.data || [])
     setHistoriales(hist.data || [])
+    setRecetas(rec.data || [])
     setCargando(false)
   }
 
@@ -85,6 +103,65 @@ export default function PacienteDetalle() {
       alert('No se pudo guardar la atención. Intenta nuevamente.')
     } finally {
       setGuardandoHist(false)
+    }
+  }
+
+  /* ── Recetas médicas / indicaciones terapéuticas ── */
+  const abrirReceta = () => {
+    setRecetaForm(vacioReceta())
+    setRecetaModal(true)
+  }
+
+  const actualizarIndicacion = (idx, campo, valor) => {
+    setRecetaForm(f => ({
+      ...f,
+      indicaciones: f.indicaciones.map((it, i) => i === idx ? { ...it, [campo]: valor } : it)
+    }))
+  }
+
+  const agregarIndicacion = () => {
+    setRecetaForm(f => ({
+      ...f,
+      indicaciones: [...f.indicaciones, { indicacion: '', frecuencia: '', duracion: '' }]
+    }))
+  }
+
+  const quitarIndicacion = (idx) => {
+    setRecetaForm(f => ({ ...f, indicaciones: f.indicaciones.filter((_, i) => i !== idx) }))
+  }
+
+  const guardarReceta = async () => {
+    const indicacionesLimpias = recetaForm.indicaciones
+      .map(it => ({
+        indicacion: (it.indicacion || '').trim(),
+        frecuencia: (it.frecuencia || '').trim(),
+        duracion:   (it.duracion || '').trim()
+      }))
+      .filter(it => it.indicacion)
+
+    const diagnosticoLimpio    = recetaForm.diagnostico.trim()
+    const recomendacionesLimpias = recetaForm.recomendaciones.trim()
+
+    if (!indicacionesLimpias.length && !diagnosticoLimpio && !recomendacionesLimpias) return
+
+    setGuardandoReceta(true)
+    try {
+      const { data, error } = await supabase.from('recetas_medicas').insert({
+        paciente_id:     id,
+        diagnostico:     diagnosticoLimpio || null,
+        indicaciones:    indicacionesLimpias,
+        recomendaciones: recomendacionesLimpias || null,
+        proximo_control: recetaForm.proximo_control || null
+      }).select().single()
+      if (error) throw error
+      setRecetaModal(false)
+      setRecetaForm(vacioReceta())
+      await cargar()
+      imprimirReceta(p, data, edad(p.fecha_nacimiento))
+    } catch {
+      alert('No se pudo guardar la receta. Intenta nuevamente.')
+    } finally {
+      setGuardandoReceta(false)
     }
   }
 
@@ -307,7 +384,7 @@ export default function PacienteDetalle() {
 
       {/* ── Tabs ── */}
       <div className="inline-flex bg-clinic-50 rounded-xl2 p-1 w-full">
-        {[['historial', 'Línea de tiempo'], ['datos', 'Notas médicas']].map(([k, lbl]) => (
+        {[['historial', 'Línea de tiempo'], ['recetas', 'Recetas'], ['datos', 'Notas médicas']].map(([k, lbl]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`flex-1 min-h-[42px] rounded-xl2 text-sm font-semibold transition ${
               tab === k ? 'bg-white text-clinic-700 shadow-soft' : 'text-clinic-400'
@@ -358,6 +435,65 @@ export default function PacienteDetalle() {
                 </li>
               ))}
             </ol>
+          )}
+        </>
+      )}
+
+      {tab === 'recetas' && (
+        <>
+          <SeccionTitulo accion={
+            <button onClick={abrirReceta} className="text-sm font-semibold text-clinic-500 flex items-center gap-1">
+              <Plus size={16} /> Nueva receta
+            </button>
+          }>
+            Recetas médicas
+          </SeccionTitulo>
+
+          {recetas.length === 0 ? (
+            <Vacio icon={ClipboardList} titulo="Sin recetas registradas"
+              descripcion="Genera indicaciones terapéuticas para este paciente y descárgalas en PDF."
+              accion={<button onClick={abrirReceta} className="btn-primary"><Plus size={18} /> Nueva receta</button>} />
+          ) : (
+            <div className="space-y-2.5">
+              {recetas.map(r => {
+                const wspReceta = p.celular
+                  ? linkWhatsAppPaciente(p.celular,
+                      `Hola ${p.nombres}, le comparto sus indicaciones terapéuticas de Movimiento Koray del ${fechaCorta(r.fecha_emision)}. Le adjunto el PDF a continuación.`)
+                  : null
+                const nIndicaciones = Array.isArray(r.indicaciones) ? r.indicaciones.length : 0
+                return (
+                  <div key={r.id} className="card p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-clinic-800 flex items-center gap-1.5">
+                          <ClipboardList size={16} className="text-clinic-500 shrink-0" />
+                          {fechaCorta(r.fecha_emision)}
+                        </p>
+                        {r.diagnostico && (
+                          <p className="text-[13px] text-clinic-500 mt-1 truncate">{r.diagnostico}</p>
+                        )}
+                        <p className="text-[12px] text-clinic-400 mt-0.5">
+                          {nIndicaciones} indicación{nIndicaciones !== 1 ? 'es' : ''}
+                          {r.proximo_control && <> · Control: {fechaCorta(r.proximo_control)}</>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={() => imprimirReceta(p, r, edad(p.fecha_nacimiento))}
+                        className="btn-ghost flex-1 min-w-[100px] text-sm">
+                        <FileDown size={15} /> PDF
+                      </button>
+                      {wspReceta && (
+                        <a href={wspReceta} target="_blank" rel="noreferrer"
+                          className="btn-mint flex-1 min-w-[100px] text-sm">
+                          <MessageCircle size={15} /> WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </>
       )}
@@ -447,6 +583,76 @@ export default function PacienteDetalle() {
           <div><label className="label">Notas de sesión</label>
             <textarea className="field min-h-[70px] py-3 resize-none" value={form.notas_sesion}
               onChange={e => setForm({ ...form, notas_sesion: e.target.value })} /></div>
+        </div>
+      </Modal>
+
+      {/* ── Modal: nueva receta / indicaciones terapéuticas ── */}
+      <Modal
+        abierto={recetaModal}
+        onClose={() => { if (!guardandoReceta) setRecetaModal(false) }}
+        titulo="Nueva receta médica"
+        footer={<>
+          <button onClick={() => setRecetaModal(false)} disabled={guardandoReceta} className="btn-ghost flex-1">
+            Cancelar
+          </button>
+          <button onClick={guardarReceta} disabled={guardandoReceta} className="btn-primary flex-1">
+            {guardandoReceta
+              ? <><Loader2 size={16} className="animate-spin" /> Guardando...</>
+              : <><FileDown size={17} /> Guardar y generar PDF</>}
+          </button>
+        </>}>
+        <div className="space-y-4">
+          <div><label className="label">Diagnóstico / Motivo</label>
+            <input className="field" placeholder="Ej. Lumbalgia mecánica"
+              value={recetaForm.diagnostico}
+              onChange={e => setRecetaForm({ ...recetaForm, diagnostico: e.target.value })} /></div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="label !mb-0">Indicaciones terapéuticas</label>
+              <button type="button" onClick={agregarIndicacion}
+                className="text-[12px] font-semibold text-clinic-500 flex items-center gap-1">
+                <Plus size={14} /> Agregar
+              </button>
+            </div>
+            <div className="space-y-2.5">
+              {recetaForm.indicaciones.map((it, idx) => (
+                <div key={idx} className="bg-clinic-50 rounded-xl p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <textarea className="field flex-1 min-h-[54px] py-2 resize-none text-[13px]"
+                      placeholder="Ej. Ejercicios de fortalecimiento de cuádriceps"
+                      value={it.indicacion}
+                      onChange={e => actualizarIndicacion(idx, 'indicacion', e.target.value)} />
+                    {recetaForm.indicaciones.length > 1 && (
+                      <button type="button" onClick={() => quitarIndicacion(idx)}
+                        className="grid place-items-center w-9 h-9 rounded-full hover:bg-rose-50 text-clinic-300 hover:text-rose-500 shrink-0"
+                        aria-label="Quitar indicación">
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input className="field text-[13px]" placeholder="Frecuencia (ej. 3x semana)"
+                      value={it.frecuencia}
+                      onChange={e => actualizarIndicacion(idx, 'frecuencia', e.target.value)} />
+                    <input className="field text-[13px]" placeholder="Duración (ej. 4 semanas)"
+                      value={it.duracion}
+                      onChange={e => actualizarIndicacion(idx, 'duracion', e.target.value)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div><label className="label">Recomendaciones generales</label>
+            <textarea className="field min-h-[70px] py-3 resize-none"
+              placeholder="Cuidados, posturas, aplicación de frío/calor..."
+              value={recetaForm.recomendaciones}
+              onChange={e => setRecetaForm({ ...recetaForm, recomendaciones: e.target.value })} /></div>
+
+          <div><label className="label">Próximo control (opcional)</label>
+            <input type="date" className="field" value={recetaForm.proximo_control}
+              onChange={e => setRecetaForm({ ...recetaForm, proximo_control: e.target.value })} /></div>
         </div>
       </Modal>
 
