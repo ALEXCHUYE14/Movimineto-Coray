@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { Avatar, Vacio, SeccionTitulo } from '../components/ui'
 import { iniciales, soles } from '../utils/format'
@@ -14,6 +14,7 @@ export default function Paquetes() {
   const [modal, setModal]         = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [form, setForm]           = useState(null)
+  const ajustando = useRef(false)
 
   const cargar = async () => {
     setCargando(true)
@@ -49,30 +50,38 @@ export default function Paquetes() {
   }
 
   const guardar = async () => {
-    if (!form.paciente_id || !form.tipo_paquete) return
+    if (!form.paciente_id || !form.tipo_paquete.trim()) {
+      alert('Selecciona el paciente e indica el tipo de paquete.')
+      return
+    }
+    const sesiones = Number(form.sesiones_totales)
+    const monto    = Math.round(Number(form.monto_pagado) * 100) / 100
+    if (!Number.isInteger(sesiones) || sesiones <= 0) { alert('El número de sesiones debe ser un entero mayor a 0.'); return }
+    if (!Number.isFinite(monto) || monto < 0) { alert('Ingresa un monto válido.'); return }
     setGuardando(true)
     try {
       // Paso 1: insertar el paquete
       const { data: paqNuevo, error: errPaq } = await supabase.from('paquetes_adquiridos').insert({
         paciente_id:   form.paciente_id,
         servicio_id:   form.servicio_id || null,
-        tipo_paquete:  form.tipo_paquete,
-        sesiones_totales: Number(form.sesiones_totales),
-        monto_pagado:  Number(form.monto_pagado),
+        tipo_paquete:  form.tipo_paquete.trim(),
+        sesiones_totales: sesiones,
+        monto_pagado:  monto,
         estado_pago:   form.estado_pago
       }).select().maybeSingle()
       if (errPaq) throw errPaq
 
       // Paso 2: si está pagado, registrar en caja
-      if (paqNuevo && form.estado_pago === 'Pagado' && Number(form.monto_pagado) > 0) {
+      if (paqNuevo && form.estado_pago === 'Pagado' && monto > 0) {
         const { error: errCaja } = await supabase.from('ingresos_caja').insert({
           paquete_id:  paqNuevo.id,
           paciente_id: form.paciente_id,
-          concepto:    `Paquete: ${form.tipo_paquete}`,
-          monto:       Number(form.monto_pagado),
+          concepto:    `Paquete: ${form.tipo_paquete.trim()}`,
+          monto,
           metodo_pago: 'Efectivo'
         })
         if (errCaja) {
+          console.error('[Movimiento Koray] Error al registrar el ingreso del paquete:', errCaja)
           // El paquete fue creado pero el ingreso en caja falló.
           // Notificar al usuario para que lo registre manualmente.
           alert(
@@ -84,8 +93,8 @@ export default function Paquetes() {
       }
 
       setModal(false); cargar()
-    } catch {
-      alert('No se pudo registrar el paquete. Verifica tu conexión e intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'registrar el paquete'))
     } finally {
       setGuardando(false)
     }
@@ -93,14 +102,21 @@ export default function Paquetes() {
 
   const ajustar = async (paq, delta) => {
     const nuevo = paq.sesiones_consumidas + delta
-    if (nuevo < 0 || nuevo > paq.sesiones_totales) return
+    if (ajustando.current || nuevo < 0 || nuevo > paq.sesiones_totales) return
+    ajustando.current = true
     try {
-      const { error } = await supabase.from('paquetes_adquiridos')
-        .update({ sesiones_consumidas: nuevo }).eq('id', paq.id)
+      // La condición sobre el valor actual evita ajustar sobre datos desactualizados
+      const { data, error } = await supabase.from('paquetes_adquiridos')
+        .update({ sesiones_consumidas: nuevo })
+        .eq('id', paq.id).eq('sesiones_consumidas', paq.sesiones_consumidas)
+        .select('id')
       if (error) throw error
-      cargar()
-    } catch {
-      alert('No se pudo actualizar la sesión. Intenta nuevamente.')
+      if (!data?.length) alert('El paquete fue modificado desde otro lugar. Se recargarán los datos.')
+      await cargar()
+    } catch (e) {
+      alert(mensajeError(e, 'actualizar la sesión'))
+    } finally {
+      ajustando.current = false
     }
   }
 

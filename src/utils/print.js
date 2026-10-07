@@ -3,12 +3,37 @@
 
 const LOGO_SRC = '/img/logo.jpeg'
 
-function abrirVentana(html) {
+// Escapa texto ingresado por el usuario antes de insertarlo en el HTML impreso.
+// Evita que caracteres como "<" o "&" rompan el documento o inyecten código.
+export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+))
+
+// Copia superficial de un objeto con todos sus textos escapados.
+const escObj = (o) => Object.fromEntries(
+  Object.entries(o || {}).map(([k, v]) => [k, typeof v === 'string' ? esc(v) : v])
+)
+
+// Abre la ventana de impresión de inmediato (dentro del clic del usuario).
+// En móviles, window.open() llamado después de un "await" queda bloqueado
+// como ventana emergente; por eso se abre primero y se llena después.
+export function prepararVentana() {
   const win = window.open('', '_blank', 'width=720,height=960,scrollbars=yes')
+  if (win) {
+    win.document.write('<p style="font-family:sans-serif;padding:24px;color:#555">Generando documento…</p>')
+  }
+  return win
+}
+
+export function abrirVentana(html, ventana = null) {
+  const win = ventana && !ventana.closed
+    ? ventana
+    : window.open('', '_blank', 'width=720,height=960,scrollbars=yes')
   if (!win) {
     alert('Permite las ventanas emergentes en tu navegador para imprimir.')
     return
   }
+  win.document.open()
   win.document.write(html)
   win.document.close()
   win.focus()
@@ -18,7 +43,9 @@ function abrirVentana(html) {
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPROBANTE DE PAGO  (estética ticket térmico, tamaño A4)
 // ─────────────────────────────────────────────────────────────────────────────
-export function imprimirTicket(ingreso) {
+export function imprimirTicket(ingresoOriginal, ventana = null) {
+  const ingreso   = escObj(ingresoOriginal)
+  if (ingresoOriginal.pacientes) ingreso.pacientes = escObj(ingresoOriginal.pacientes)
   const logoUrl   = `${window.location.origin}${LOGO_SRC}`
   const fecha     = new Date(ingreso.fecha_pago)
   const fechaStr  = fecha.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -130,13 +157,15 @@ export function imprimirTicket(ingreso) {
 </body>
 </html>`
 
-  abrirVentana(html)
+  abrirVentana(html, ventana)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DIAGNÓSTICO / REPORTE CLÍNICO  (formato A4 profesional)
 // ─────────────────────────────────────────────────────────────────────────────
-export function imprimirDiagnostico(paciente, historiales, edadAnos) {
+export function imprimirDiagnostico(pacienteOriginal, historialesOriginal, edadAnos) {
+  const paciente    = escObj(pacienteOriginal)
+  const historiales = (historialesOriginal || []).map(escObj)
   const logoUrl  = `${window.location.origin}${LOGO_SRC}`
   const hoy      = new Date()
   const fechaHoy = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -172,6 +201,7 @@ export function imprimirDiagnostico(paciente, historiales, edadAnos) {
             </div>
           </div>
           <table class="campos-tabla">
+            ${campo('Antecedentes',                h.antecedentes)}
             ${campo('Motivo de consulta',          h.motivo_consulta)}
             ${campo('Evaluación fisioterapéutica', h.evaluacion_fisioterapeutica)}
             ${campo('Diagnóstico',                  h.diagnostico)}
@@ -534,7 +564,9 @@ export function imprimirDiagnostico(paciente, historiales, edadAnos) {
 // ─────────────────────────────────────────────────────────────────────────────
 // RECETA / INDICACIONES TERAPÉUTICAS  (formato A4 profesional)
 // ─────────────────────────────────────────────────────────────────────────────
-export function imprimirReceta(paciente, receta, edadAnos) {
+export function imprimirReceta(pacienteOriginal, recetaOriginal, edadAnos, ventana = null) {
+  const paciente = escObj(pacienteOriginal)
+  const receta   = escObj(recetaOriginal)
   const logoUrl = `${window.location.origin}${LOGO_SRC}`
 
   const fmtFecha = (iso) => {
@@ -543,11 +575,11 @@ export function imprimirReceta(paciente, receta, edadAnos) {
     return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
   }
 
-  const fechaEmision = receta.fecha_emision || new Date().toISOString().slice(0, 10)
+  const fechaEmision = receta.fecha_emision || new Date().toLocaleDateString('en-CA')
   const fechaDoc      = fmtFecha(fechaEmision)
   const numDoc = `MK-IND-${fechaEmision.replace(/-/g, '')}-${(paciente.dni || '').slice(-4).padStart(4, '0')}`
 
-  const indicaciones = Array.isArray(receta.indicaciones) ? receta.indicaciones : []
+  const indicaciones = (Array.isArray(receta.indicaciones) ? receta.indicaciones : []).map(escObj)
 
   const filasIndicaciones = indicaciones.length === 0
     ? `<tr><td colspan="4" class="ind-vacio">Sin indicaciones registradas.</td></tr>`
@@ -888,5 +920,5 @@ export function imprimirReceta(paciente, receta, edadAnos) {
 </body>
 </html>`
 
-  abrirVentana(html)
+  abrirVentana(html, ventana)
 }

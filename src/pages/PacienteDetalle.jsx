@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { Avatar, Vacio, SeccionTitulo } from '../components/ui'
 import { iniciales, edad, soles, fechaCorta, hoyISO, linkWhatsAppPaciente } from '../utils/format'
-import { imprimirDiagnostico, imprimirReceta } from '../utils/print'
+import { imprimirDiagnostico, imprimirReceta, prepararVentana } from '../utils/print'
 import {
   ArrowLeft, Phone, MessageCircle, PackageCheck, Plus, FileText,
   Stethoscope, CalendarClock, Cake, NotebookPen, CreditCard,
@@ -19,6 +19,7 @@ export default function PacienteDetalle() {
   const [p, setP]                     = useState(null)
   const [cargando, setCargando]       = useState(true)
   const [noEncontrado, setNoEncontrado] = useState(false)
+  const [errorCarga, setErrorCarga]   = useState('')
   const [paquetes, setPaquetes]       = useState([])
   const [historiales, setHistoriales] = useState([])
   const [recetas, setRecetas]         = useState([])
@@ -46,6 +47,9 @@ export default function PacienteDetalle() {
   const [citaGuardada, setCitaGuardada] = useState(false)
   const [guardandoCita, setGuardandoCita] = useState(false)
 
+  // Evita descontar dos veces una sesión por toques rápidos repetidos
+  const ajustandoSesion = useRef(false)
+
   function vacioHist() {
     return {
       fecha_atencion: hoyISO(), antecedentes: '', motivo_consulta: '',
@@ -64,22 +68,32 @@ export default function PacienteDetalle() {
   }
 
   const cargar = async () => {
-    const [pac, paq, hist, rec] = await Promise.all([
-      supabase.from('pacientes').select('*').eq('id', id).maybeSingle(),
-      supabase.from('paquetes_adquiridos').select('*').eq('paciente_id', id).order('creado_en', { ascending: false }),
-      supabase.from('historiales_clinicos').select('*').eq('paciente_id', id).order('fecha_atencion', { ascending: false }),
-      supabase.from('recetas_medicas').select('*').eq('paciente_id', id).order('fecha_emision', { ascending: false })
-    ])
-    if (!pac.data) {
-      setNoEncontrado(true)
-    } else {
-      setP(pac.data)
-      setNoEncontrado(false)
+    try {
+      const [pac, paq, hist, rec] = await Promise.all([
+        supabase.from('pacientes').select('*').eq('id', id).maybeSingle(),
+        supabase.from('paquetes_adquiridos').select('*').eq('paciente_id', id).order('creado_en', { ascending: false }),
+        supabase.from('historiales_clinicos').select('*').eq('paciente_id', id).order('fecha_atencion', { ascending: false }),
+        supabase.from('recetas_medicas').select('*').eq('paciente_id', id)
+          .order('fecha_emision', { ascending: false }).order('creado_en', { ascending: false })
+      ])
+      // Un error de red o de sesión NO significa que el paciente no exista
+      if (pac.error) throw pac.error
+      if (!pac.data) {
+        setNoEncontrado(true)
+      } else {
+        setP(pac.data)
+        setNoEncontrado(false)
+      }
+      setErrorCarga('')
+      if (!paq.error)  setPaquetes(paq.data || [])
+      if (!hist.error) setHistoriales(hist.data || [])
+      if (!rec.error)  setRecetas(rec.data || [])
+      else console.error('[Movimiento Koray] No se pudieron cargar las recetas:', rec.error)
+    } catch (e) {
+      setErrorCarga(mensajeError(e, 'cargar los datos del paciente'))
+    } finally {
+      setCargando(false)
     }
-    setPaquetes(paq.data || [])
-    setHistoriales(hist.data || [])
-    setRecetas(rec.data || [])
-    setCargando(false)
   }
 
   useEffect(() => {
@@ -93,14 +107,22 @@ export default function PacienteDetalle() {
 
   /* ── Historial clínico ── */
   const guardarHist = async () => {
-    if (!form.motivo_consulta && !form.notas_sesion && !form.evolucion) return
+    const limpio = Object.fromEntries(
+      Object.entries(form).map(([k, v]) => [k, typeof v === 'string' ? (v.trim() || null) : v])
+    )
+    if (!limpio.fecha_atencion) { alert('Indica la fecha de atención.'); return }
+    const camposClinicos = ['antecedentes', 'motivo_consulta', 'evaluacion_fisioterapeutica', 'diagnostico', 'evolucion', 'notas_sesion']
+    if (!camposClinicos.some(k => limpio[k])) {
+      alert('Completa al menos un campo clínico antes de guardar.')
+      return
+    }
     setGuardandoHist(true)
     try {
-      const { error } = await supabase.from('historiales_clinicos').insert({ paciente_id: id, ...form })
+      const { error } = await supabase.from('historiales_clinicos').insert({ paciente_id: id, ...limpio })
       if (error) throw error
       setForm(vacioHist()); setModal(false); cargar()
-    } catch {
-      alert('No se pudo guardar la atención. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'guardar la atención'))
     } finally {
       setGuardandoHist(false)
     }
@@ -142,39 +164,70 @@ export default function PacienteDetalle() {
     const diagnosticoLimpio    = recetaForm.diagnostico.trim()
     const recomendacionesLimpias = recetaForm.recomendaciones.trim()
 
-    if (!indicacionesLimpias.length && !diagnosticoLimpio && !recomendacionesLimpias) return
+    if (!indicacionesLimpias.length && !diagnosticoLimpio && !recomendacionesLimpias) {
+      alert('Completa el diagnóstico, al menos una indicación o las recomendaciones.')
+      return
+    }
+    if (recetaForm.proximo_control && recetaForm.proximo_control < hoyISO()) {
+      alert('La fecha del próximo control no puede ser anterior a hoy.')
+      return
+    }
 
+    // La ventana del PDF se abre ya, dentro del clic; si se abre después del
+    // guardado (await) el navegador del celular la bloquea.
+    const ventana = prepararVentana()
     setGuardandoReceta(true)
+    let guardada = null
     try {
       const { data, error } = await supabase.from('recetas_medicas').insert({
         paciente_id:     id,
+        fecha_emision:   hoyISO(),
         diagnostico:     diagnosticoLimpio || null,
         indicaciones:    indicacionesLimpias,
         recomendaciones: recomendacionesLimpias || null,
         proximo_control: recetaForm.proximo_control || null
       }).select().single()
       if (error) throw error
-      setRecetaModal(false)
-      setRecetaForm(vacioReceta())
-      await cargar()
-      imprimirReceta(p, data, edad(p.fecha_nacimiento))
-    } catch {
-      alert('No se pudo guardar la receta. Intenta nuevamente.')
+      guardada = data
+    } catch (e) {
+      ventana?.close()
+      alert(mensajeError(e, 'guardar la receta'))
+      return
     } finally {
       setGuardandoReceta(false)
+    }
+
+    // La receta ya está guardada: un fallo al imprimir no debe reportarse como fallo al guardar.
+    setRecetaModal(false)
+    setRecetaForm(vacioReceta())
+    setRecetas(r => [guardada, ...r])
+    cargar()
+    try {
+      imprimirReceta(p, guardada, edad(p.fecha_nacimiento), ventana)
+    } catch (e) {
+      ventana?.close()
+      console.error('[Movimiento Koray] Error al generar el PDF de la receta:', e)
+      alert('La receta se guardó correctamente, pero no se pudo generar el PDF. Usa el botón "PDF" de la receta.')
     }
   }
 
   /* ── Sesiones de paquete ── */
   const restarSesion = async (paq) => {
-    if (paq.sesiones_consumidas >= paq.sesiones_totales) return
+    if (ajustandoSesion.current || paq.sesiones_consumidas >= paq.sesiones_totales) return
+    ajustandoSesion.current = true
     try {
-      const { error } = await supabase.from('paquetes_adquiridos')
-        .update({ sesiones_consumidas: paq.sesiones_consumidas + 1 }).eq('id', paq.id)
+      // La condición sobre el valor actual evita descontar sobre datos desactualizados
+      const { data, error } = await supabase.from('paquetes_adquiridos')
+        .update({ sesiones_consumidas: paq.sesiones_consumidas + 1 })
+        .eq('id', paq.id).eq('sesiones_consumidas', paq.sesiones_consumidas)
+        .select('id')
       if (error) throw error
-      cargar()
-    } catch {
-      alert('No se pudo actualizar la sesión. Intenta nuevamente.')
+      if (!data?.length) alert('El paquete fue modificado desde otro lugar. Se recargarán los datos.')
+      await cargar()
+    } catch (e) {
+      alert(mensajeError(e, 'actualizar la sesión'))
+    } finally {
+      ajustandoSesion.current = false
     }
   }
 
@@ -193,7 +246,14 @@ export default function PacienteDetalle() {
   }
 
   const guardarEdicion = async () => {
-    if (!editForm.nombres.trim() || !editForm.apellidos.trim()) return
+    if (!editForm.nombres.trim() || !editForm.apellidos.trim()) {
+      alert('Nombres y apellidos son obligatorios.')
+      return
+    }
+    if (editForm.dni && editForm.dni.length !== 8) {
+      alert('El DNI debe tener 8 dígitos.')
+      return
+    }
     setGuardandoEdit(true)
     try {
       const { error } = await supabase.from('pacientes').update({
@@ -208,8 +268,8 @@ export default function PacienteDetalle() {
       if (error) throw error
       setEditModal(false)
       cargar()
-    } catch {
-      alert('No se pudo guardar los cambios. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'guardar los cambios'))
     } finally {
       setGuardandoEdit(false)
     }
@@ -229,8 +289,8 @@ export default function PacienteDetalle() {
       const { error } = await supabase.from('pacientes').delete().eq('id', id)
       if (error) throw error
       navigate('/pacientes')
-    } catch {
-      alert('No se pudo eliminar el paciente. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'eliminar el paciente'))
     }
   }
 
@@ -242,7 +302,10 @@ export default function PacienteDetalle() {
   }
 
   const guardarCita = async () => {
-    if (!citaForm.fecha || !citaForm.hora) return
+    if (!citaForm.fecha || !citaForm.hora) {
+      alert('Indica la fecha y la hora de la cita.')
+      return
+    }
     setGuardandoCita(true)
     try {
       const { error } = await supabase.from('citas').insert({
@@ -255,8 +318,8 @@ export default function PacienteDetalle() {
       })
       if (error) throw error
       setCitaGuardada(true)
-    } catch {
-      alert('No se pudo agendar la cita. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'agendar la cita'))
     } finally {
       setGuardandoCita(false)
     }
@@ -265,6 +328,16 @@ export default function PacienteDetalle() {
   /* ── Render: estados de carga y error ── */
   if (cargando) {
     return <div className="card p-8 text-center text-clinic-300">Cargando paciente...</div>
+  }
+
+  if (errorCarga && !p) {
+    return (
+      <div className="card p-10 text-center flex flex-col items-center gap-3">
+        <AlertCircle size={26} className="text-rose-400" />
+        <p className="text-sm text-clinic-500 whitespace-pre-line">{errorCarga}</p>
+        <button onClick={() => { setCargando(true); cargar() }} className="btn-primary">Reintentar</button>
+      </div>
+    )
   }
 
   if (noEncontrado) {

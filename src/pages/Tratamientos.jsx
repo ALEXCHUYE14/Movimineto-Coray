@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { Avatar, Vacio, SeccionTitulo, StatCard } from '../components/ui'
 import { iniciales, fechaCorta, hoyISO } from '../utils/format'
@@ -34,6 +34,7 @@ export default function Tratamientos() {
   const [guardando, setGuardando]       = useState(false)
   const [modalDetalle, setModalDetalle] = useState(null)
   const [form, setForm]                 = useState(vacioForm())
+  const marcando = useRef(false)
 
   // Recarga la lista y sincroniza el detalle abierto para evitar datos stale
   const cargar = async () => {
@@ -65,7 +66,20 @@ export default function Tratamientos() {
   useEffect(() => { cargar() }, [])
 
   const guardar = async () => {
-    if (!form.paciente_id || !form.nombre_tratamiento.trim()) return
+    if (!form.paciente_id || !form.nombre_tratamiento.trim()) {
+      alert('Selecciona el paciente e indica el nombre del tratamiento.')
+      return
+    }
+    const previstas = Number(form.sesiones_previstas)
+    if (!Number.isInteger(previstas) || previstas <= 0) {
+      alert('Las sesiones previstas deben ser un número entero mayor a 0.')
+      return
+    }
+    if (!form.fecha_inicio) { alert('Indica la fecha de inicio.'); return }
+    if (form.fecha_fin_estimada && form.fecha_fin_estimada < form.fecha_inicio) {
+      alert('La fecha de fin estimada no puede ser anterior a la fecha de inicio.')
+      return
+    }
     setGuardando(true)
     try {
       const { error } = await supabase.from('tratamientos').insert({
@@ -74,7 +88,7 @@ export default function Tratamientos() {
         diagnostico:          form.diagnostico.trim()   || null,
         objetivos:            form.objetivos.trim()     || null,
         plan_sesiones:        form.plan_sesiones.trim() || null,
-        sesiones_previstas:   Number(form.sesiones_previstas) || 10,
+        sesiones_previstas:   previstas,
         sesiones_completadas: 0,
         fecha_inicio:         form.fecha_inicio,
         fecha_fin_estimada:   form.fecha_fin_estimada   || null,
@@ -84,25 +98,28 @@ export default function Tratamientos() {
       setModal(false)
       setForm(vacioForm())
       cargar()
-    } catch {
-      alert('No se pudo registrar el tratamiento. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'registrar el tratamiento'))
     } finally {
       setGuardando(false)
     }
   }
 
   const marcarSesion = async (t) => {
-    if (t.sesiones_completadas >= t.sesiones_previstas) return
+    if (marcando.current || t.estado !== 'Activo' || t.sesiones_completadas >= t.sesiones_previstas) return
+    marcando.current = true
     const completadas = t.sesiones_completadas + 1
     const estado = completadas >= t.sesiones_previstas ? 'Finalizado' : t.estado
     try {
       const { error } = await supabase.from('tratamientos')
         .update({ sesiones_completadas: completadas, estado })
-        .eq('id', t.id)
+        .eq('id', t.id).eq('sesiones_completadas', t.sesiones_completadas)
       if (error) throw error
-      cargar()
-    } catch {
-      alert('No se pudo marcar la sesión. Intenta nuevamente.')
+      await cargar()
+    } catch (e) {
+      alert(mensajeError(e, 'marcar la sesión'))
+    } finally {
+      marcando.current = false
     }
   }
 
@@ -111,8 +128,8 @@ export default function Tratamientos() {
       const { error } = await supabase.from('tratamientos').update({ estado }).eq('id', id)
       if (error) throw error
       cargar()
-    } catch {
-      alert('No se pudo cambiar el estado. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'cambiar el estado'))
     }
   }
 

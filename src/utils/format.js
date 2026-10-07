@@ -1,4 +1,4 @@
-import { format, parseISO, isValid } from 'date-fns'
+import { format, parseISO, isValid, differenceInYears, startOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 // Moneda peruana
@@ -33,10 +33,20 @@ export const hoyISO = () => format(new Date(), 'yyyy-MM-dd')
 export const edad = (fechaNac) => {
   if (!fechaNac) return null
   const d = typeof fechaNac === 'string' ? parseISO(fechaNac) : fechaNac
-  if (!isValid(d)) return null
-  const diff = Date.now() - d.getTime()
-  return Math.abs(new Date(diff).getUTCFullYear() - 1970)
+  if (!isValid(d) || d > new Date()) return null
+  return differenceInYears(new Date(), d)
 }
+
+// Fecha local (yyyy-MM-dd) de un timestamp guardado en UTC.
+// Evita que un pago de las 8 p.m. en Perú (UTC-5) cuente como del día siguiente.
+export const fechaLocalISO = (ts) => {
+  if (!ts) return ''
+  const d = typeof ts === 'string' ? parseISO(ts) : ts
+  return isValid(d) ? format(d, 'yyyy-MM-dd') : ''
+}
+
+// Inicio del mes en curso en hora local, como timestamp ISO para filtrar columnas timestamptz.
+export const inicioMesISO = () => startOfMonth(new Date()).toISOString()
 
 export const iniciales = (nombres = '', apellidos = '') =>
   `${(nombres[0] || '').toUpperCase()}${(apellidos[0] || '').toUpperCase()}` || '??'

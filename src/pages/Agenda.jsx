@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { EstadoCita, Avatar, Vacio } from '../components/ui'
 import { soles, hora12, iniciales, linkWhatsAppPaciente } from '../utils/format'
@@ -84,8 +84,8 @@ export default function Agenda() {
       if (error) throw error
       setModal(false)
       cargar()
-    } catch {
-      alert('No se pudo guardar la cita. Verifica tu conexión e intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'guardar la cita'))
     } finally {
       if (montado.current) setGuardando(false)
     }
@@ -96,8 +96,8 @@ export default function Agenda() {
       const { error } = await supabase.from('citas').update({ estado }).eq('id', id)
       if (error) throw error
       cargar()
-    } catch {
-      alert('No se pudo actualizar el estado. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'actualizar el estado'))
     }
   }
 
@@ -107,8 +107,8 @@ export default function Agenda() {
       const { error } = await supabase.from('citas').delete().eq('id', id)
       if (error) throw error
       cargar()
-    } catch {
-      alert('No se pudo eliminar la cita. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'eliminar la cita'))
     }
   }
 

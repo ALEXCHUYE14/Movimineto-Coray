@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { Avatar, Vacio } from '../components/ui'
 import { iniciales, edad } from '../utils/format'
@@ -36,18 +36,29 @@ export default function Pacientes() {
   useEffect(() => { cargar() }, [])
 
   const guardar = async () => {
-    if (!form.nombres.trim() || !form.apellidos.trim()) return
+    if (!form.nombres.trim() || !form.apellidos.trim()) {
+      alert('Nombres y apellidos son obligatorios.')
+      return
+    }
+    if (form.dni.trim() && !/^\d{8}$/.test(form.dni.trim())) {
+      alert('El DNI debe tener 8 dígitos.')
+      return
+    }
     setGuardando(true)
     try {
       const { error } = await supabase.from('pacientes').insert({
-        ...form,
-        fecha_nacimiento: form.fecha_nacimiento || null,
-        dni: form.dni.trim() || null
+        nombres:                  form.nombres.trim(),
+        apellidos:                form.apellidos.trim(),
+        dni:                      form.dni.trim() || null,
+        telefono:                 form.telefono.trim() || null,
+        celular:                  form.celular.trim() || null,
+        fecha_nacimiento:         form.fecha_nacimiento || null,
+        historial_medico_general: form.historial_medico_general.trim() || null
       })
       if (error) throw error
       setForm(vacio()); setModal(false); cargar()
-    } catch {
-      alert('No se pudo registrar el paciente. Verifica tu conexión e intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'registrar el paciente'))
     } finally {
       setGuardando(false)
     }
@@ -59,8 +70,8 @@ export default function Pacientes() {
       const { error } = await supabase.from('pacientes').delete().eq('id', id)
       if (error) throw error
       cargar()
-    } catch {
-      alert('No se pudo eliminar el paciente. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'eliminar el paciente'))
     }
   }
 

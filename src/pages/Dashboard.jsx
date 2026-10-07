@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { StatCard, EstadoCita, Avatar, Vacio, SeccionTitulo } from '../components/ui'
-import { soles, fechaLarga, hora12, hoyISO, iniciales } from '../utils/format'
+import { soles, fechaLarga, hora12, hoyISO, iniciales, inicioMesISO } from '../utils/format'
 import {
   CalendarDays, Wallet, Users, AlertCircle,
   ChevronRight, Plus, CheckCircle2, PackageCheck, UserCheck
@@ -29,7 +29,7 @@ export default function Dashboard() {
   const cargar = async () => {
     setCargando(true)
     setErrorCarga(null)
-    const inicioMes = hoy.slice(0, 8) + '01'
+    const inicioMes = inicioMesISO()
     try {
       const [citasRes, ingresosRes, pacCountRes, paqRes] = await Promise.all([
         supabase.from('citas')
@@ -44,6 +44,8 @@ export default function Dashboard() {
           .select('id, tipo_paquete, sesiones_totales, sesiones_consumidas, pacientes(nombres, apellidos)')
       ])
       if (!montado.current) return
+      const fallo = [citasRes, ingresosRes, pacCountRes, paqRes].find(r => r.error)
+      if (fallo) throw fallo.error
       setCitasHoy(citasRes.data || [])
       setIngresoMes((ingresosRes.data || []).reduce((s, r) => s + Number(r.monto), 0))
       setTotalPacientes(pacCountRes.count || 0)
@@ -53,8 +55,8 @@ export default function Dashboard() {
           return restantes > 0 && restantes <= 2
         })
       )
-    } catch {
-      if (montado.current) setErrorCarga('No se pudo cargar la información. Verifica tu conexión.')
+    } catch (e) {
+      if (montado.current) setErrorCarga(mensajeError(e, 'cargar la información'))
     } finally {
       if (montado.current) setCargando(false)
     }
@@ -68,8 +70,8 @@ export default function Dashboard() {
       const { error } = await supabase.from('citas').update({ estado: 'Asistida' }).eq('id', id)
       if (error) throw error
       if (montado.current) await cargar()
-    } catch {
-      alert('No se pudo actualizar la cita. Intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'actualizar la cita'))
     } finally {
       if (montado.current) setMarcando(null)
     }

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { StatCard, Vacio, SeccionTitulo } from '../components/ui'
-import { soles, fechaCorta, hoyISO } from '../utils/format'
-import { imprimirTicket } from '../utils/print'
+import { soles, fechaCorta, hoyISO, fechaLocalISO, inicioMesISO } from '../utils/format'
+import { imprimirTicket, prepararVentana, abrirVentana, esc } from '../utils/print'
 import {
   Wallet, Plus, TrendingUp, TrendingDown, CalendarDays,
   Banknote, Smartphone, CreditCard, Printer, Lock,
@@ -35,8 +35,9 @@ export default function Caja() {
     setCargando(true)
     // Traer TODOS los registros del mes en curso (sin límite) para garantizar
     // que las estadísticas sean exactas aunque haya más de 100 transacciones.
-    const inicioMes = hoyISO().slice(0, 8) + '01'
-    const [{ data: ing }, { data: egr }] = await Promise.all([
+    // El inicio de mes se calcula en hora local (Perú) y no en UTC.
+    const inicioMes = inicioMesISO()
+    const [{ data: ing, error: errIng }, { data: egr, error: errEgr }] = await Promise.all([
       supabase.from('ingresos_caja')
         .select('*, pacientes(nombres, apellidos)')
         .gte('fecha_pago', inicioMes)
@@ -46,8 +47,10 @@ export default function Caja() {
         .gte('fecha_egreso', inicioMes)
         .order('fecha_egreso', { ascending: false })
     ])
-    setIngresos(ing || [])
-    setEgresos(egr || [])
+    if (errIng) console.error('[Movimiento Koray] Error al cargar ingresos:', errIng)
+    if (errEgr) console.error('[Movimiento Koray] Error al cargar egresos:', errEgr)
+    if (!errIng) setIngresos(ing || [])
+    if (!errEgr) setEgresos(egr || [])
     setCargando(false)
   }
 
@@ -64,29 +67,47 @@ export default function Caja() {
   }
 
   const guardarIngreso = async () => {
-    if (!form.monto || Number(form.monto) <= 0) return
+    const monto = Math.round(Number(form.monto) * 100) / 100
+    if (!Number.isFinite(monto) || monto <= 0) {
+      alert('Ingresa un monto válido mayor a 0.')
+      return
+    }
+    // Se abre la ventana del comprobante dentro del clic (los celulares bloquean
+    // ventanas abiertas después de un await).
+    const ventana = prepararVentana()
     setGuardandoIng(true)
+    let nuevo = null
     try {
-      const { data: nuevo, error } = await supabase.from('ingresos_caja').insert({
+      const { data, error } = await supabase.from('ingresos_caja').insert({
         paciente_id: form.paciente_id || null,
-        concepto:    form.concepto || 'Atención',
-        monto:       Number(form.monto),
+        concepto:    form.concepto.trim() || 'Atención',
+        monto,
         metodo_pago: form.metodo_pago
       }).select().single()
       if (error) throw error
-      setModal(false)
-      await cargar()
-      const pac = form.paciente_id
-        ? pacientes.find(p => p.id === form.paciente_id) || null
-        : null
+      nuevo = data
+    } catch (e) {
+      ventana?.close()
+      alert(mensajeError(e, 'registrar el pago'))
+      return
+    } finally {
+      setGuardandoIng(false)
+    }
+
+    setModal(false)
+    cargar()
+    const pac = form.paciente_id
+      ? pacientes.find(p => p.id === form.paciente_id) || null
+      : null
+    try {
       imprimirTicket({
         ...nuevo,
         pacientes: pac ? { nombres: pac.nombres, apellidos: pac.apellidos } : null
-      })
-    } catch {
-      alert('No se pudo registrar el pago. Verifica tu conexión e intenta nuevamente.')
-    } finally {
-      setGuardandoIng(false)
+      }, ventana)
+    } catch (e) {
+      ventana?.close()
+      console.error('[Movimiento Koray] Error al generar el comprobante:', e)
+      alert('El pago se registró correctamente, pero no se pudo generar el comprobante.')
     }
   }
 
@@ -97,19 +118,21 @@ export default function Caja() {
   }
 
   const guardarEgreso = async () => {
-    if (!formEgreso.concepto.trim() || !formEgreso.monto || Number(formEgreso.monto) <= 0) return
+    const montoEgr = Math.round(Number(formEgreso.monto) * 100) / 100
+    if (!formEgreso.concepto.trim()) { alert('Indica el concepto del egreso.'); return }
+    if (!Number.isFinite(montoEgr) || montoEgr <= 0) { alert('Ingresa un monto válido mayor a 0.'); return }
     setGuardandoEgr(true)
     try {
       const { error } = await supabase.from('egresos_caja').insert({
         concepto:  formEgreso.concepto.trim(),
-        monto:     Number(formEgreso.monto),
+        monto:     montoEgr,
         categoria: formEgreso.categoria
       })
       if (error) throw error
       setModalEgreso(false)
       cargar()
-    } catch {
-      alert('No se pudo registrar el egreso. Verifica tu conexión e intenta nuevamente.')
+    } catch (e) {
+      alert(mensajeError(e, 'registrar el egreso'))
     } finally {
       setGuardandoEgr(false)
     }
@@ -120,12 +143,12 @@ export default function Caja() {
     const hoy = hoyISO()
     let ingMes = 0, ingHoy = 0, egrMes = 0, egrHoy = 0
     ingresos.forEach(i => {
-      const f = i.fecha_pago?.slice(0, 10)
+      const f = fechaLocalISO(i.fecha_pago)
       ingMes += Number(i.monto)          // todos ya son del mes
       if (f === hoy) ingHoy += Number(i.monto)
     })
     egresos.forEach(e => {
-      const f = e.fecha_egreso?.slice(0, 10)
+      const f = fechaLocalISO(e.fecha_egreso)
       egrMes += Number(e.monto)          // todos ya son del mes
       if (f === hoy) egrHoy += Number(e.monto)
     })
@@ -142,8 +165,8 @@ export default function Caja() {
   // ── Resumen del día para cierre ──────────────────────────────────────────
   const resumenHoy = useMemo(() => {
     const hoy = hoyISO()
-    const ingHoy = ingresos.filter(i => i.fecha_pago?.slice(0, 10) === hoy)
-    const egrHoy = egresos.filter(e => e.fecha_egreso?.slice(0, 10) === hoy)
+    const ingHoy = ingresos.filter(i => fechaLocalISO(i.fecha_pago) === hoy)
+    const egrHoy = egresos.filter(e => fechaLocalISO(e.fecha_egreso) === hoy)
     const porMetodo = {}
     ingHoy.forEach(i => {
       porMetodo[i.metodo_pago] = (porMetodo[i.metodo_pago] || 0) + Number(i.monto)
@@ -164,11 +187,11 @@ export default function Caja() {
     const logoUrl  = `${window.location.origin}/img/logo.jpeg`
 
     const filasMetodo = Object.entries(resumenHoy.porMetodo)
-      .map(([m, v]) => `<div class="row"><span>${m}</span><span>S/ ${Number(v).toFixed(2)}</span></div>`)
+      .map(([m, v]) => `<div class="row"><span>${esc(m)}</span><span>S/ ${Number(v).toFixed(2)}</span></div>`)
       .join('') || '<div class="small">Sin ingresos</div>'
 
     const filasEgresos = resumenHoy.egrHoy
-      .map(e => `<div class="row"><span class="truncate">${e.concepto} (${e.categoria})</span><span>-S/ ${Number(e.monto).toFixed(2)}</span></div>`)
+      .map(e => `<div class="row"><span class="truncate">${esc(e.concepto)} (${esc(e.categoria)})</span><span>-S/ ${Number(e.monto).toFixed(2)}</span></div>`)
       .join('') || '<div class="small">Sin egresos</div>'
 
     const signo = resumenHoy.balance >= 0 ? '' : '-'
@@ -226,12 +249,7 @@ export default function Caja() {
 </body>
 </html>`
 
-    const win = window.open('', '_blank', 'width=720,height=960,scrollbars=yes')
-    if (!win) { alert('Permite las ventanas emergentes en tu navegador para imprimir.'); return }
-    win.document.write(html)
-    win.document.close()
-    win.focus()
-    setTimeout(() => win.print(), 650)
+    abrirVentana(html)
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
