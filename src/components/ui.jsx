@@ -72,3 +72,17 @@ export function SeccionTitulo({ children, accion }) {
 export function LinkCard({ to, children }) {
   return <Link to={to} className="block card p-4 hover:shadow-float transition-shadow">{children}</Link>
 }
+
+// Aviso de error de carga con botón para reintentar.
+// Evita que un fallo de red se confunda con "no hay registros".
+export function AvisoError({ mensaje, onReintentar }) {
+  if (!mensaje) return null
+  return (
+    <div role="alert" className="card p-4 border-l-4 border-rose-400 bg-rose-50 text-rose-700 text-sm flex items-center gap-3">
+      <span className="flex-1 whitespace-pre-line">{mensaje}</span>
+      {onReintentar && (
+        <button onClick={onReintentar} className="font-semibold underline shrink-0">Reintentar</button>
+      )}
+    </div>
+  )
+}

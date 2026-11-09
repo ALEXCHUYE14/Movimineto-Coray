@@ -54,8 +54,7 @@ export default function Dashboard() {
           .gte('fecha_egreso', inicioMes),
         supabase.from('pacientes')
           .select('id', { count: 'exact', head: true }),
-        supabase.from('paquetes_adquiridos')
-          .select('id, paciente_id, tipo_paquete, sesiones_totales, sesiones_consumidas, pacientes(nombres, apellidos, celular)'),
+        cargarPaquetesPorVencer(),
         supabase.from('citas')
           .select('id, paciente_id, fecha, hora, estado, pacientes(nombres, apellidos, celular), servicios_precios(nombre_servicio)')
           .gte('fecha', manana).lte('fecha', limite)
@@ -72,12 +71,7 @@ export default function Dashboard() {
       setIngresoMes(suma(ingresosRes.data))
       setEgresoMes(suma(egresosRes.data))
       setTotalPacientes(pacCountRes.count || 0)
-      setPaqPorVencer(
-        (paqRes.data || []).filter(p => {
-          const restantes = p.sesiones_totales - p.sesiones_consumidas
-          return restantes > 0 && restantes <= 2
-        })
-      )
+      setPaqPorVencer(paqRes.data || [])
     } catch (e) {
       if (montado.current) setErrorCarga(mensajeError(e, 'cargar la información'))
     } finally {
@@ -314,6 +308,24 @@ export default function Dashboard() {
       <IndicadoresPanel />
     </div>
   )
+}
+
+// Paquetes con 1 o 2 sesiones restantes. Usa la columna calculada "sesiones_restantes"
+// (filtrado en el servidor); si la migración aún no se ejecutó, filtra en el navegador.
+async function cargarPaquetesPorVencer() {
+  const campos = 'id, paciente_id, tipo_paquete, sesiones_totales, sesiones_consumidas, pacientes(nombres, apellidos, celular)'
+  const res = await supabase.from('paquetes_adquiridos').select(campos)
+    .gt('sesiones_restantes', 0).lte('sesiones_restantes', 2)
+  if (!res.error) return res
+  const todos = await supabase.from('paquetes_adquiridos').select(campos)
+  if (todos.error) return todos
+  return {
+    data: (todos.data || []).filter(p => {
+      const restantes = p.sesiones_totales - p.sesiones_consumidas
+      return restantes > 0 && restantes <= 2
+    }),
+    error: null
+  }
 }
 
 function BotonWhatsApp({ href, titulo }) {

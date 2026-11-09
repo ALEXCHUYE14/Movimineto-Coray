@@ -34,6 +34,23 @@ En **Supabase → Project Settings → API** copia:
 En **Supabase → Authentication → Users → Add user**, crea el correo y
 contraseña con los que Diego iniciará sesión. (El perfil se crea solo.)
 
+### 5. Migraciones (ejecutar DESPUÉS de crear el usuario)
+En **SQL Editor**, ejecuta en este orden:
+1. `supabase/add_egresos_caja.sql`
+2. `supabase/add_recetas_medicas.sql`
+3. `supabase/add_seguridad_eva_paquetes.sql` — restringe el acceso al personal
+   autorizado (las cuentas que existan en ese momento) y agrega la escala EVA.
+
+Para dar acceso a otra persona del equipo, crea su cuenta y ejecuta:
+```sql
+insert into public.personal_autorizado (user_id)
+select id from auth.users where email = 'correo@ejemplo.com';
+```
+
+**Recomendado:** en **Authentication → Sign In / Providers** desactiva
+"Allow new users to sign up", y en **Authentication → Password security**
+activa la protección contra contraseñas filtradas.
+
 ### 5. Ejecutar
 ```bash
 npm run dev

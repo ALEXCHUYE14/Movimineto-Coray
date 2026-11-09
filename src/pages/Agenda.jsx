@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
-import { EstadoCita, Avatar, Vacio } from '../components/ui'
+import { EstadoCita, Avatar, Vacio, AvisoError } from '../components/ui'
 import { soles, iniciales, linkRecordatorioCita } from '../utils/format'
+import { confirmarCruceCita } from '../lib/citas'
 import { addDays, format, startOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
@@ -17,6 +18,7 @@ export default function Agenda() {
   const [ref, setRef]           = useState(new Date())
   const [citas, setCitas]       = useState([])
   const [cargando, setCargando] = useState(true)
+  const [errorCarga, setErrorCarga] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [pacientes, setPacientes] = useState([])
   const [servicios, setServicios] = useState([])
@@ -41,13 +43,15 @@ export default function Agenda() {
   const cargar = async () => {
     setCargando(true)
     try {
-      const { data } = await supabase.from('citas')
+      const { data, error } = await supabase.from('citas')
         .select('*, pacientes(nombres, apellidos, celular), servicios_precios(nombre_servicio, precio)')
         .gte('fecha', rango.desde).lte('fecha', rango.hasta)
         .order('fecha').order('hora')
-      if (montado.current) setCitas(data || [])
-    } catch {
-      // mantener datos anteriores en caso de error de red
+      if (error) throw error
+      if (montado.current) { setCitas(data || []); setErrorCarga('') }
+    } catch (e) {
+      // No se muestran las citas de otro rango como si fueran de este: se vacía y se avisa
+      if (montado.current) { setCitas([]); setErrorCarga(mensajeError(e, 'cargar la agenda')) }
     } finally {
       if (montado.current) setCargando(false)
     }
@@ -72,9 +76,11 @@ export default function Agenda() {
   }
 
   const guardar = async () => {
-    if (!form.paciente_id || !form.fecha || !form.hora) return
+    if (!form.paciente_id) { alert('Selecciona el paciente.'); return }
+    if (!form.fecha || !form.hora) { alert('Indica la fecha y la hora de la cita.'); return }
     setGuardando(true)
     try {
+      if (!(await confirmarCruceCita(form.fecha, form.hora))) return
       const { error } = await supabase.from('citas').insert({
         paciente_id: form.paciente_id,
         servicio_id: form.servicio_id || null,
@@ -156,6 +162,8 @@ export default function Agenda() {
           <ChevronRight size={20} />
         </button>
       </div>
+
+      <AvisoError mensaje={errorCarga} onReintentar={cargar} />
 
       {cargando ? (
         <div className="card p-8 text-center text-clinic-300">Cargando agenda...</div>

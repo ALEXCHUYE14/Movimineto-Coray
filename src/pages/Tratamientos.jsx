@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
-import { Avatar, Vacio, SeccionTitulo, StatCard } from '../components/ui'
+import { Avatar, Vacio, SeccionTitulo, StatCard, AvisoError } from '../components/ui'
 import { iniciales, fechaCorta, hoyISO } from '../utils/format'
 import {
   ClipboardList, Plus, Search, ChevronRight,
@@ -28,6 +28,7 @@ export default function Tratamientos() {
   const [tratamientos, setTratamientos] = useState([])
   const [pacientes, setPacientes]       = useState([])
   const [cargando, setCargando]         = useState(true)
+  const [errorCarga, setErrorCarga]     = useState('')
   const [busqueda, setBusqueda]         = useState('')
   const [filtroEstado, setFiltroEstado] = useState('Activo')
   const [modal, setModal]               = useState(false)
@@ -40,10 +41,12 @@ export default function Tratamientos() {
   const cargar = async () => {
     setCargando(true)
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('tratamientos')
         .select('*, pacientes(id, nombres, apellidos)')
         .order('creado_en', { ascending: false })
+      if (error) throw error
+      setErrorCarga('')
       const lista = data || []
       setTratamientos(lista)
       // Mantener el modal de detalle actualizado si estaba abierto
@@ -51,8 +54,9 @@ export default function Tratamientos() {
         if (!prev) return null
         return lista.find(t => t.id === prev.id) || null
       })
-    } catch {
-      // mantener datos anteriores en error de red
+    } catch (e) {
+      // Se mantienen los datos anteriores y se avisa del error
+      setErrorCarga(mensajeError(e, 'cargar los tratamientos'))
     } finally {
       setCargando(false)
     }
@@ -153,6 +157,8 @@ export default function Tratamientos() {
 
   return (
     <div className="space-y-5">
+
+      <AvisoError mensaje={errorCarga} onReintentar={cargar} />
 
       {/* Estadísticas */}
       <div className="grid grid-cols-3 gap-3">

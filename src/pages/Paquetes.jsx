@@ -2,15 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
-import { Avatar, Vacio, SeccionTitulo } from '../components/ui'
+import { Avatar, Vacio, SeccionTitulo, AvisoError } from '../components/ui'
 import { iniciales, soles } from '../utils/format'
 import { PackageCheck, Plus, Minus, ChevronRight, ShoppingBag, Loader2 } from 'lucide-react'
+
+// Deben coincidir con el CHECK de ingresos_caja.metodo_pago
+const METODOS_PAGO = ['Efectivo', 'Yape', 'Plin', 'Transferencia', 'Tarjeta']
 
 export default function Paquetes() {
   const [paquetes, setPaquetes]   = useState([])
   const [pacientes, setPacientes] = useState([])
   const [servicios, setServicios] = useState([])
   const [cargando, setCargando]   = useState(true)
+  const [errorCarga, setErrorCarga] = useState('')
   const [modal, setModal]         = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [form, setForm]           = useState(null)
@@ -18,10 +22,11 @@ export default function Paquetes() {
 
   const cargar = async () => {
     setCargando(true)
-    const { data } = await supabase.from('paquetes_adquiridos')
+    const { data, error } = await supabase.from('paquetes_adquiridos')
       .select('*, pacientes(nombres, apellidos)')
       .order('creado_en', { ascending: false })
-    setPaquetes(data || [])
+    if (error) setErrorCarga(mensajeError(error, 'cargar los paquetes'))
+    else { setPaquetes(data || []); setErrorCarga('') }
     setCargando(false)
   }
   useEffect(() => { cargar() }, [])
@@ -34,7 +39,7 @@ export default function Paquetes() {
   }, [])
 
   const abrir = () => {
-    setForm({ paciente_id: '', servicio_id: '', tipo_paquete: '', sesiones_totales: 15, monto_pagado: 0, estado_pago: 'Pagado' })
+    setForm({ paciente_id: '', servicio_id: '', tipo_paquete: '', sesiones_totales: 15, monto_pagado: 0, estado_pago: 'Pagado', metodo_pago: 'Efectivo' })
     setModal(true)
   }
 
@@ -78,7 +83,7 @@ export default function Paquetes() {
           paciente_id: form.paciente_id,
           concepto:    `Paquete: ${form.tipo_paquete.trim()}`,
           monto,
-          metodo_pago: 'Efectivo'
+          metodo_pago: METODOS_PAGO.includes(form.metodo_pago) ? form.metodo_pago : 'Efectivo'
         })
         if (errCaja) {
           console.error('[Movimiento Koray] Error al registrar el ingreso del paquete:', errCaja)
@@ -128,6 +133,8 @@ export default function Paquetes() {
       <div className="flex justify-end">
         <button onClick={abrir} className="btn-primary"><Plus size={18} /> Vender paquete</button>
       </div>
+
+      <AvisoError mensaje={errorCarga} onReintentar={cargar} />
 
       {cargando ? (
         <div className="card p-8 text-center text-clinic-300">Cargando...</div>
@@ -197,6 +204,13 @@ export default function Paquetes() {
                 onChange={e => setForm({ ...form, estado_pago: e.target.value })}>
                 <option>Pagado</option><option>Parcial</option><option>Pendiente</option>
               </select></div>
+            {form.estado_pago === 'Pagado' && (
+              <div><label className="label">Método de pago</label>
+                <select className="field" value={form.metodo_pago}
+                  onChange={e => setForm({ ...form, metodo_pago: e.target.value })}>
+                  {METODOS_PAGO.map(m => <option key={m}>{m}</option>)}
+                </select></div>
+            )}
             <p className="text-[12px] text-clinic-400">
               Si el estado es "Pagado", se registrará automáticamente el ingreso en Caja.
             </p>

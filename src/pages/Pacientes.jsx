@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
-import { Avatar, Vacio } from '../components/ui'
+import { Avatar, Vacio, AvisoError } from '../components/ui'
 import { iniciales, edad } from '../utils/format'
 import {
   Search, Plus, ChevronRight, UserPlus, Phone,
@@ -15,6 +15,7 @@ export default function Pacientes() {
   const [pacientes, setPacientes] = useState([])
   const [busqueda, setBusqueda]   = useState('')
   const [cargando, setCargando]   = useState(true)
+  const [errorCarga, setErrorCarga] = useState('')
   const [modal, setModal]         = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [form, setForm]           = useState(vacio())
@@ -29,8 +30,9 @@ export default function Pacientes() {
 
   const cargar = async () => {
     setCargando(true)
-    const { data } = await supabase.from('pacientes').select('*').order('apellidos')
-    setPacientes(data || [])
+    const { data, error } = await supabase.from('pacientes').select('*').order('apellidos')
+    if (error) setErrorCarga(mensajeError(error, 'cargar los pacientes'))
+    else { setPacientes(data || []); setErrorCarga('') }
     setCargando(false)
   }
   useEffect(() => { cargar() }, [])
@@ -106,6 +108,8 @@ export default function Pacientes() {
           <Plus size={20} /><span className="hidden sm:inline">Nuevo</span>
         </button>
       </div>
+
+      <AvisoError mensaje={errorCarga} onReintentar={cargar} />
 
       {/* Contador + indicador modo DNI */}
       <div className="flex items-center justify-between px-1">

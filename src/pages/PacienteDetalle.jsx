@@ -5,6 +5,8 @@ import Modal from '../components/Modal'
 import { Avatar, Vacio, SeccionTitulo } from '../components/ui'
 import { iniciales, edad, soles, fechaCorta, hoyISO, linkWhatsAppPaciente } from '../utils/format'
 import { imprimirDiagnostico, imprimirReceta, prepararVentana } from '../utils/print'
+import { SelectorEva, ChipEva, GraficoEva, evaValida } from '../components/Eva'
+import { confirmarCruceCita } from '../lib/citas'
 import {
   ArrowLeft, Phone, MessageCircle, PackageCheck, Plus, FileText,
   Stethoscope, CalendarClock, Cake, NotebookPen, CreditCard,
@@ -54,7 +56,7 @@ export default function PacienteDetalle() {
     return {
       fecha_atencion: hoyISO(), antecedentes: '', motivo_consulta: '',
       evaluacion_fisioterapeutica: '', diagnostico: '',
-      evolucion: '', notas_sesion: ''
+      evolucion: '', notas_sesion: '', eva_dolor: null
     }
   }
 
@@ -112,14 +114,27 @@ export default function PacienteDetalle() {
     )
     if (!limpio.fecha_atencion) { alert('Indica la fecha de atención.'); return }
     const camposClinicos = ['antecedentes', 'motivo_consulta', 'evaluacion_fisioterapeutica', 'diagnostico', 'evolucion', 'notas_sesion']
-    if (!camposClinicos.some(k => limpio[k])) {
-      alert('Completa al menos un campo clínico antes de guardar.')
+    const conEva = evaValida(limpio.eva_dolor)
+    if (!camposClinicos.some(k => limpio[k]) && !conEva) {
+      alert('Completa al menos un campo clínico o la escala de dolor antes de guardar.')
       return
     }
+    // Solo se envía la EVA si se registró: así funciona aunque la base aún no tenga la columna.
+    const { eva_dolor, ...resto } = limpio
+    const registro = conEva ? { paciente_id: id, ...resto, eva_dolor } : { paciente_id: id, ...resto }
     setGuardandoHist(true)
     try {
-      const { error } = await supabase.from('historiales_clinicos').insert({ paciente_id: id, ...limpio })
-      if (error) throw error
+      let { error } = await supabase.from('historiales_clinicos').insert(registro)
+      if (error && conEva && /eva_dolor/i.test(String(error.message || ''))) {
+        // La migración de la EVA aún no se ejecutó: guardar el resto de la atención.
+        if (!camposClinicos.some(k => resto[k])) throw error
+        ;({ error } = await supabase.from('historiales_clinicos').insert({ paciente_id: id, ...resto }))
+        if (error) throw error
+        alert('La atención se guardó, pero sin la escala de dolor: falta ejecutar la migración ' +
+          '"add_seguridad_eva_paquetes.sql" en Supabase.')
+      } else if (error) {
+        throw error
+      }
       setForm(vacioHist()); setModal(false); cargar()
     } catch (e) {
       alert(mensajeError(e, 'guardar la atención'))
@@ -308,6 +323,7 @@ export default function PacienteDetalle() {
     }
     setGuardandoCita(true)
     try {
+      if (!(await confirmarCruceCita(citaForm.fecha, citaForm.hora))) return
       const { error } = await supabase.from('citas').insert({
         paciente_id: id,
         servicio_id: citaForm.servicio_id || null,
@@ -485,6 +501,8 @@ export default function PacienteDetalle() {
             Evolución clínica
           </SeccionTitulo>
 
+          <GraficoEva historiales={historiales} />
+
           {historiales.length === 0 ? (
             <Vacio icon={Stethoscope} titulo="Sin registros clínicos"
               descripcion="Registra la primera evaluación o sesión de este paciente."
@@ -495,8 +513,11 @@ export default function PacienteDetalle() {
                 <li key={h.id} className="ml-5 animate-fade-up">
                   <span className="absolute -left-[9px] grid place-items-center w-4 h-4 rounded-full bg-clinic-500 ring-4 ring-white" />
                   <div className="card p-4">
-                    <div className="flex items-center gap-2 text-[12px] font-bold text-clinic-500 mb-2">
-                      <CalendarClock size={14} /> {fechaCorta(h.fecha_atencion)}
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 text-[12px] font-bold text-clinic-500">
+                        <CalendarClock size={14} /> {fechaCorta(h.fecha_atencion)}
+                      </div>
+                      <ChipEva valor={h.eva_dolor} />
                     </div>
                     {h.antecedentes                && <Campo etq="Antecedentes"              val={h.antecedentes} />}
                     {h.motivo_consulta             && <Campo etq="Motivo"                    val={h.motivo_consulta} />}
@@ -636,6 +657,9 @@ export default function PacienteDetalle() {
           <div><label className="label">Fecha de atención</label>
             <input type="date" className="field" value={form.fecha_atencion}
               onChange={e => setForm({ ...form, fecha_atencion: e.target.value })} /></div>
+          <div><label className="label">Escala de dolor (EVA)</label>
+            <SelectorEva value={form.eva_dolor}
+              onChange={v => setForm(f => ({ ...f, eva_dolor: v }))} /></div>
           <div><label className="label">Antecedentes</label>
             <textarea className="field min-h-[70px] py-3 resize-none"
               placeholder="Antecedentes relevantes: cirugías, traumatismos, patologías previas..."

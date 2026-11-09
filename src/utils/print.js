@@ -201,6 +201,7 @@ export function imprimirDiagnostico(pacienteOriginal, historialesOriginal, edadA
             </div>
           </div>
           <table class="campos-tabla">
+            ${campo('Dolor (EVA 0-10)',            Number.isInteger(h.eva_dolor) ? `${h.eva_dolor}/10` : '')}
             ${campo('Antecedentes',                h.antecedentes)}
             ${campo('Motivo de consulta',          h.motivo_consulta)}
             ${campo('Evaluación fisioterapéutica', h.evaluacion_fisioterapeutica)}
