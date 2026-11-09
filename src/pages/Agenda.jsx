@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, mensajeError } from '../lib/supabase'
 import Modal from '../components/Modal'
 import { EstadoCita, Avatar, Vacio } from '../components/ui'
-import { soles, hora12, iniciales, linkWhatsAppPaciente } from '../utils/format'
+import { soles, iniciales, linkRecordatorioCita } from '../utils/format'
 import { addDays, format, startOfWeek } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
@@ -144,7 +144,7 @@ export default function Agenda() {
           <ChevronLeft size={20} />
         </button>
         <button onClick={() => setRef(new Date())} className="text-center">
-          <p className="font-display font-bold text-clinic-800 capitalize">
+          <p className="font-display font-bold text-clinic-800 first-letter:uppercase">
             {vista === 'dia'
               ? format(ref, "EEEE dd 'de' MMMM", { locale: es })
               : `${format(diasSemana[0], 'dd MMM', { locale: es })} - ${format(diasSemana[6], 'dd MMM', { locale: es })}`}
@@ -278,12 +278,7 @@ function VistaDia({ citas, onEstado, onEliminar, onNueva }) {
 
 function FilaCita({ c, onEstado, onEliminar, compacta }) {
   const [abierto, setAbierto] = useState(false)
-  const wsp = c.pacientes?.celular
-    ? linkWhatsAppPaciente(
-        c.pacientes.celular,
-        `Hola ${c.pacientes?.nombres}, te recordamos tu cita en Movimiento Koray el ${c.fecha} a las ${hora12(c.hora)}.`
-      )
-    : null
+  const wsp = linkRecordatorioCita(c)
   return (
     <div className={compacta ? 'px-4 py-3' : 'p-3.5'}>
       <div className="flex items-center gap-3">

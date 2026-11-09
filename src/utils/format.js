@@ -1,4 +1,4 @@
-import { format, parseISO, isValid, differenceInYears, startOfMonth } from 'date-fns'
+import { format, parseISO, isValid, differenceInYears, startOfMonth, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 // Moneda peruana
@@ -61,4 +61,25 @@ export const linkWhatsAppPaciente = (celular, mensaje = '') => {
   const num  = (celular || '').replace(/\D/g, '')
   const full = num.startsWith('51') ? num : `51${num}`
   return `https://wa.me/${full}?text=${encodeURIComponent(mensaje)}`
+}
+
+// Fecha relativa para mensajes: "hoy", "mañana" o "el lunes, 09 de noviembre"
+export const fechaRelativa = (fechaISO) => {
+  if (!fechaISO) return ''
+  const hoy = hoyISO()
+  const manana = format(addDays(new Date(), 1), 'yyyy-MM-dd')
+  if (fechaISO === hoy) return 'hoy'
+  if (fechaISO === manana) return 'mañana'
+  const f = fechaLarga(fechaISO)
+  return f ? `el ${f}` : fechaISO
+}
+
+// Link de WhatsApp con el recordatorio de una cita (null si el paciente no tiene celular)
+export const linkRecordatorioCita = (cita) => {
+  const pac = cita?.pacientes
+  if (!pac?.celular) return null
+  return linkWhatsAppPaciente(
+    pac.celular,
+    `Hola ${pac.nombres}, te recordamos tu cita en Movimiento Koray ${fechaRelativa(cita.fecha)} a las ${hora12(cita.hora)}. ¡Te esperamos!`
+  )
 }
