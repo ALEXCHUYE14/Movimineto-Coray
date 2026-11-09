@@ -7,8 +7,9 @@ import { imprimirTicket, prepararVentana, abrirVentana, esc } from '../utils/pri
 import {
   Wallet, Plus, TrendingUp, TrendingDown, CalendarDays,
   Banknote, Smartphone, CreditCard, Printer, Lock,
-  ArrowDownRight, Loader2
+  ArrowDownRight, Loader2, FileDown
 } from 'lucide-react'
+import ExportarReporte from '../components/ExportarReporte'
 
 const METODOS = ['Efectivo', 'Yape', 'Plin', 'Transferencia', 'Tarjeta']
 const CATEGORIAS_EGRESO = ['Materiales', 'Gastos operativos', 'Equipos', 'Otros']
@@ -26,6 +27,7 @@ export default function Caja() {
   const [modal, setModal]             = useState(false)
   const [modalEgreso, setModalEgreso] = useState(false)
   const [modalCierre, setModalCierre] = useState(false)
+  const [modalExportar, setModalExportar] = useState(false)
   const [form, setForm]               = useState(null)
   const [formEgreso, setFormEgreso]   = useState(null)
   const [guardandoIng, setGuardandoIng] = useState(false)
@@ -277,7 +279,10 @@ export default function Caja() {
       </div>
 
       {/* Registrar pago */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <button onClick={() => setModalExportar(true)} className="btn-ghost flex items-center gap-2">
+          <FileDown size={18} /> Exportar
+        </button>
         <button onClick={abrirIngreso} className="btn-primary flex items-center gap-2">
           <Plus size={18} /> Registrar pago
         </button>
@@ -443,6 +448,8 @@ export default function Caja() {
           </div>
         )}
       </Modal>
+
+      <ExportarReporte abierto={modalExportar} onClose={() => setModalExportar(false)} />
 
       {/* ── Modal: Cierre de caja ── */}
       <Modal abierto={modalCierre} onClose={() => setModalCierre(false)} titulo="Cierre de caja"

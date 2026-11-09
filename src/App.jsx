@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -11,6 +11,13 @@ import Caja from './pages/Caja'
 import Servicios from './pages/Servicios'
 import Tratamientos from './pages/Tratamientos'
 import Splash from './components/Splash'
+
+// Al pasar de un paciente a otro (p. ej. desde el buscador) se monta una ficha
+// nueva, para no arrastrar pestañas o formularios abiertos del paciente anterior.
+function PacienteDetalleRuta() {
+  const { id } = useParams()
+  return <PacienteDetalle key={id} />
+}
 
 function Privado({ children }) {
   const { session, cargando } = useAuth()
@@ -35,7 +42,7 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="agenda" element={<Agenda />} />
         <Route path="pacientes" element={<Pacientes />} />
-        <Route path="pacientes/:id" element={<PacienteDetalle />} />
+        <Route path="pacientes/:id" element={<PacienteDetalleRuta />} />
         <Route path="tratamientos" element={<Tratamientos />} />
         <Route path="paquetes" element={<Paquetes />} />
         <Route path="caja" element={<Caja />} />

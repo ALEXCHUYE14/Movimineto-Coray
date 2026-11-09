@@ -5,6 +5,7 @@ import {
   Menu, LogOut, X, ClipboardList
 } from 'lucide-react'
 import Logo from './Logo'
+import BuscadorGlobal from './BuscadorGlobal'
 import { useAuth } from '../context/AuthContext'
 
 const nav = [
@@ -103,7 +104,8 @@ export default function Layout() {
               <Menu size={22} />
             </button>
             <div className="lg:hidden"><Logo size={36} /></div>
-            <h1 className="font-display text-lg lg:text-xl font-bold text-clinic-800 flex-1">{tituloActual}</h1>
+            <h1 className="font-display text-lg lg:text-xl font-bold text-clinic-800 flex-1 truncate">{tituloActual}</h1>
+            <BuscadorGlobal />
             <div className="hidden sm:flex items-center gap-2.5 pl-3">
               <div className="text-right leading-tight">
                 <p className="text-[13px] font-semibold text-clinic-700">{perfil?.nombre || 'Especialista'}</p>
