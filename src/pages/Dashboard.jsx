@@ -4,6 +4,7 @@ import { addDays, format } from 'date-fns'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { StatCard, EstadoCita, Avatar, Vacio, SeccionTitulo } from '../components/ui'
+import IndicadoresPanel from '../components/IndicadoresPanel'
 import {
   soles, fechaLarga, fechaCorta, hora12, hoyISO, iniciales, inicioMesISO,
   linkRecordatorioCita, linkWhatsAppPaciente
@@ -308,6 +309,9 @@ export default function Dashboard() {
           )}
         </section>
       )}
+
+      {/* Indicadores del negocio (cargan por separado) */}
+      <IndicadoresPanel />
     </div>
   )
 }
